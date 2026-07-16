@@ -1,0 +1,78 @@
+import { execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { loadMergeInputs } from '../src/git/loadMerge';
+
+const scriptPath = fileURLToPath(new URL('../scripts/make-conflict-repo.mjs', import.meta.url));
+
+function makeFixture(...args: string[]): string {
+  const output = execFileSync('node', [scriptPath, ...args], { encoding: 'utf8' });
+  const path = /^repo:\s+(.+)$/m.exec(output)?.[1];
+  if (!path) {
+    throw new Error(`could not parse repo path:\n${output}`);
+  }
+  return path.trim();
+}
+
+let repo: string;
+let rebaseRepo: string;
+
+beforeAll(() => {
+  repo = makeFixture();
+  rebaseRepo = makeFixture('--rebase');
+}, 60_000);
+
+afterAll(() => {
+  for (const dir of [repo, rebaseRepo]) {
+    if (dir) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+describe('loadMergeInputs', () => {
+  test('puts your local content on the left during a merge', async () => {
+    const { payload } = await loadMergeInputs(repo, 'modify-modify.txt', 'auto');
+    expect(payload.left).toContain('OURS two');
+    expect(payload.right).toContain('THEIRS two');
+    expect(payload.base).toBe('one\ntwo\nthree\n');
+    expect(payload.labels.left).toBe('Yours (local)');
+  });
+
+  test('still puts YOUR commit on the left during a rebase, despite git swapping stages', async () => {
+    const { payload } = await loadMergeInputs(rebaseRepo, 'modify-modify.txt', 'auto');
+    expect(payload.left).toContain('OURS two');
+    expect(payload.right).toContain('THEIRS two');
+    expect(payload.labels.left).toBe('Yours (being rebased)');
+  });
+
+  test('treats a both-added conflict as having an empty base', async () => {
+    const { payload, unsupported } = await loadMergeInputs(repo, 'both-added.txt', 'auto');
+    expect(unsupported).toBeUndefined();
+    expect(payload.base).toBe('');
+    expect(payload.left).toContain('ours line 1');
+    expect(payload.right).toContain('theirs line 1');
+  });
+
+  test('flags a delete/modify conflict as unsupported rather than showing empty panes', async () => {
+    const { unsupported } = await loadMergeInputs(repo, 'delete-modify.txt', 'auto');
+    expect(unsupported).toBe('deletedByThem');
+  });
+
+  test('normalizes CRLF for diffing but records the disagreement', async () => {
+    const { payload } = await loadMergeInputs(repo, 'crlf.txt', 'auto');
+    expect(payload.left).not.toContain('\r');
+    expect(payload.right).not.toContain('\r');
+    expect(payload.eol.conflict).toBe(true);
+    expect(payload.eol.left).toBe('crlf');
+    expect(payload.eol.right).toBe('lf');
+    // 'auto' keeps your side's ending.
+    expect(payload.eol.suggested).toBe('crlf');
+  });
+
+  test('honors an explicit line-ending setting over the local side', async () => {
+    const { payload } = await loadMergeInputs(repo, 'crlf.txt', 'lf');
+    expect(payload.eol.suggested).toBe('lf');
+  });
+});

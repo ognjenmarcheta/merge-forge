@@ -58,6 +58,10 @@
       {
         "command": "mergeForge.applyAllNonConflicting",
         "title": "Merge Forge: Apply All Non-Conflicting Changes"
+      },
+      {
+        "command": "mergeForge.diagnostics",
+        "title": "Merge Forge: Show Git Diagnostics"
       }
     ],
     "menus": {
