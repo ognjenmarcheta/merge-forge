@@ -4,5 +4,7 @@
 !README.md
 !CHANGELOG.md
 !LICENSE
-!icon.png
+
+# Never ship build noise, sourcemaps, or OS cruft.
 dist/**/*.map
+**/.DS_Store
