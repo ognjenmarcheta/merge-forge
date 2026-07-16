@@ -1,0 +1,171 @@
+{
+  "name": "merge-forge",
+  "displayName": "MergeForge — JetBrains-style Conflict Resolver",
+  "description": "Resolve Git merge conflicts in a JetBrains/WebStorm-style three-pane visual merge editor.",
+  "version": "0.1.0",
+  "publisher": "ognjenmarcheta",
+  "license": "MIT",
+  "private": true,
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "merge",
+    "conflict",
+    "git",
+    "three-way merge",
+    "diff3",
+    "jetbrains"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ognjenmarcheta/merge-forge.git"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "mergeForge.resolve",
+        "title": "Merge Forge: Resolve Conflicts in File...",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "mergeForge.resolveThis",
+        "title": "Resolve in Merge Forge",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "mergeForge.pickConflicted",
+        "title": "Merge Forge: Show All Conflicted Files"
+      },
+      {
+        "command": "mergeForge.nextChange",
+        "title": "Merge Forge: Next Change"
+      },
+      {
+        "command": "mergeForge.prevChange",
+        "title": "Merge Forge: Previous Change"
+      },
+      {
+        "command": "mergeForge.applyAllNonConflicting",
+        "title": "Merge Forge: Apply All Non-Conflicting Changes"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "mergeForge.resolveThis",
+          "group": "7_modification",
+          "when": "mergeForge.hasConflicts && resourcePath in mergeForge.conflictedPaths"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "mergeForge.resolveThis",
+          "group": "inline",
+          "when": "scmProvider == git && scmResourceGroup == merge"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mergeForge.resolveThis",
+          "group": "navigation",
+          "when": "mergeForge.editorHasConflictMarkers"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mergeForge.resolveThis",
+          "when": "false"
+        },
+        {
+          "command": "mergeForge.nextChange",
+          "when": "mergeForge.panelFocused"
+        },
+        {
+          "command": "mergeForge.prevChange",
+          "when": "mergeForge.panelFocused"
+        },
+        {
+          "command": "mergeForge.applyAllNonConflicting",
+          "when": "mergeForge.panelFocused"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "mergeForge.nextChange",
+        "key": "f7",
+        "when": "mergeForge.panelFocused"
+      },
+      {
+        "command": "mergeForge.prevChange",
+        "key": "shift+f7",
+        "when": "mergeForge.panelFocused"
+      }
+    ],
+    "configuration": {
+      "title": "Merge Forge",
+      "properties": {
+        "mergeForge.autoOpenOnConflict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open the Merge Forge editor when opening a file with merge conflicts."
+        },
+        "mergeForge.lineEnding": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "lf",
+            "crlf"
+          ],
+          "default": "auto",
+          "description": "Line ending used for the merge result when the sides disagree. \"auto\" prefers your local side's dominant line ending."
+        },
+        "mergeForge.autoApplyNonConflicting": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply all non-conflicting changes automatically when the merge editor opens."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs --production",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.extension.json --noEmit && tsc -p tsconfig.webview.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
+    "vscode:prepublish": "pnpm run build",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "@types/node": "^20.19.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
+    "diff": "^7.0.0",
+    "esbuild": "^0.25.5",
+    "eslint": "^9.31.0",
+    "globals": "^17.7.0",
+    "monaco-editor": "^0.52.2",
+    "node-diff3": "^3.1.2",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4"
+  }
+}
