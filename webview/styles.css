@@ -188,3 +188,42 @@ button:disabled {
   text-decoration: line-through;
   opacity: 0.45;
 }
+
+/* --- chunk action buttons in the gutter strips ---------------------------- */
+
+.mf-strip-buttons {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mf-chunk-button {
+  position: absolute;
+  left: 50%;
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.4));
+  border-radius: 2px;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.65;
+  pointer-events: auto;
+}
+
+.mf-chunk-button:hover {
+  border-color: var(--vscode-focusBorder, #0078d4);
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  opacity: 1;
+}
+
+.mf-banner label {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  cursor: pointer;
+}
