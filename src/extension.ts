@@ -1,11 +1,26 @@
+import { join } from 'node:path';
 import * as vscode from 'vscode';
-import { MergePanel } from './panel/MergePanel';
-import { activeRepoRoot, pickConflictedFile } from './ui/conflictPicker';
 import { listConflicted } from './git/conflicts';
 import { detectOperation } from './git/repoContext';
 import { readStages } from './git/stages';
+import { MergePanel } from './panel/MergePanel';
+import { ConflictCodeLensProvider } from './ui/codeLens';
+import { activeRepoRoot, pickConflictedFile } from './ui/conflictPicker';
+import { ContextKeys } from './ui/contextKeys';
 
 export function activate(context: vscode.ExtensionContext): void {
+  const contextKeys = new ContextKeys(context);
+  contextKeys.register();
+
+  let conflictedPaths = new Set<string>();
+  const refreshConflicted = async (): Promise<void> => {
+    const repoRoot = await activeRepoRoot();
+    const paths = repoRoot ? await listConflicted(repoRoot).catch(() => []) : [];
+    conflictedPaths = new Set(paths.map((path) => join(repoRoot!, path)));
+    codeLens.refresh();
+  };
+  const codeLens = new ConflictCodeLensProvider((uri) => conflictedPaths.has(uri.fsPath));
+
   const open = async (uri?: vscode.Uri): Promise<void> => {
     const target = uri ?? vscode.window.activeTextEditor?.document.uri;
     if (!target) {
@@ -13,29 +28,57 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
     await MergePanel.createOrShow(context, target);
+    await contextKeys.refresh();
+    await refreshConflicted();
+  };
+
+  const pickAndOpen = async (): Promise<void> => {
+    const picked = await pickConflictedFile();
+    if (picked) {
+      await open(picked);
+    }
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('mergeForge.resolve', async () => {
-      const picked = await pickConflictedFile();
-      if (picked) {
-        await MergePanel.createOrShow(context, picked);
-      }
-    }),
-    vscode.commands.registerCommand('mergeForge.resolveThis', open),
-    vscode.commands.registerCommand('mergeForge.pickConflicted', async () => {
-      const picked = await pickConflictedFile();
-      if (picked) {
-        await MergePanel.createOrShow(context, picked);
-      }
-    }),
+    vscode.languages.registerCodeLensProvider({ scheme: 'file' }, codeLens),
+    vscode.commands.registerCommand('mergeForge.resolve', pickAndOpen),
+    vscode.commands.registerCommand('mergeForge.pickConflicted', pickAndOpen),
+    // The SCM view hands over a resource state rather than a Uri.
+    vscode.commands.registerCommand(
+      'mergeForge.resolveThis',
+      (arg?: vscode.Uri | { resourceUri?: vscode.Uri }) =>
+        open(arg instanceof vscode.Uri ? arg : arg?.resourceUri),
+    ),
+    vscode.commands.registerCommand('mergeForge.nextChange', () =>
+      MergePanel.runOnActive('nextChange'),
+    ),
+    vscode.commands.registerCommand('mergeForge.prevChange', () =>
+      MergePanel.runOnActive('prevChange'),
+    ),
+    vscode.commands.registerCommand('mergeForge.applyAllNonConflicting', () =>
+      MergePanel.runOnActive('applyAllNonConflicting'),
+    ),
     vscode.commands.registerCommand('mergeForge.diagnostics', () => showDiagnostics(context)),
+    // Opening a conflicted file can jump straight into the merge editor, for people who
+    // would rather never see the markers.
+    vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+      if (!editor || !readAutoOpen() || !conflictedPaths.has(editor.document.uri.fsPath)) {
+        return;
+      }
+      await MergePanel.createOrShow(context, editor.document.uri);
+    }),
   );
+
+  void refreshConflicted();
+}
+
+function readAutoOpen(): boolean {
+  return vscode.workspace.getConfiguration('mergeForge').get<boolean>('autoOpenOnConflict', false);
 }
 
 /**
- * Dumps what the git layer sees for the current repo into an output channel.
- * This is how the git layer is verified against a real conflicted repo by hand.
+ * Dumps what the git layer sees for the current repo. This is how the git layer gets
+ * checked by hand against a real conflicted repository.
  */
 async function showDiagnostics(context: vscode.ExtensionContext): Promise<void> {
   const channel = vscode.window.createOutputChannel('Merge Forge');

@@ -9,8 +9,18 @@ export type UnsupportedReason = 'deletedByThem' | 'deletedByUs';
 
 export interface MergeInputs {
   payload: InitPayload;
+  /** True when your side carried a UTF-8 BOM, so applying can put it back. */
+  hadBom: boolean;
   /** Set when the file is a delete/modify conflict, which has no meaningful three panes. */
   unsupported?: UnsupportedReason;
+}
+
+/** UTF-8 BOM as decoded into a JS string. */
+const BOM = '﻿';
+
+/** Strips a leading BOM so it never reaches the diff as part of the first line. */
+function stripBom(text: string): string {
+  return text.startsWith(BOM) ? text.slice(BOM.length) : text;
 }
 
 /**
@@ -36,18 +46,25 @@ export async function loadMergeInputs(
   const theirs = operation.swapPresentation ? stages.ours : stages.theirs;
 
   if (!yours) {
-    return { payload: emptyPayload(relativePath), unsupported: 'deletedByUs' };
+    return { payload: emptyPayload(relativePath), hadBom: false, unsupported: 'deletedByUs' };
   }
   if (!theirs) {
-    return { payload: emptyPayload(relativePath), unsupported: 'deletedByThem' };
+    return { payload: emptyPayload(relativePath), hadBom: false, unsupported: 'deletedByThem' };
   }
 
-  const left = yours.toString('utf8');
-  const right = theirs.toString('utf8');
+  const rawLeft = yours.toString('utf8');
+  const rawRight = theirs.toString('utf8');
   // A both-added conflict has no ancestor; an empty base makes every line an insertion.
-  const base = stages.base?.toString('utf8') ?? '';
+  const rawBase = stages.base?.toString('utf8') ?? '';
+
+  // A BOM is file metadata, not content. Left in place it would attach to the first line
+  // and make otherwise-identical first lines differ.
+  const left = stripBom(rawLeft);
+  const right = stripBom(rawRight);
+  const base = stripBom(rawBase);
 
   return {
+    hadBom: rawLeft.startsWith(BOM),
     payload: {
       filePath: relative(repoRoot, relativePath) || relativePath,
       languageId: 'plaintext',
