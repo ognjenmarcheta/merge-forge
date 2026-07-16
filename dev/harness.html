@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MergeForge webview harness</title>
+    <link rel="stylesheet" href="../dist/webview/main.css" />
+    <style>
+      /* Stand-ins for the --vscode-* variables a real webview host injects. */
+      body {
+        --vscode-editor-background: #1f1f1f;
+        --vscode-editor-foreground: #cccccc;
+        --vscode-foreground: #cccccc;
+        --vscode-font-family: -apple-system, 'Segoe UI', sans-serif;
+        --vscode-font-size: 13px;
+        --vscode-editorLineNumber-foreground: #6e7681;
+        --vscode-editorLineNumber-activeForeground: #cccccc;
+        --vscode-editor-selectionBackground: #264f78;
+        --vscode-editorCursor-foreground: #aeafad;
+        --vscode-panel-border: #2b2b2b;
+        --vscode-button-background: #0e639c;
+        --vscode-button-foreground: #ffffff;
+        --vscode-button-hoverBackground: #1177bb;
+        --vscode-button-secondaryBackground: #313131;
+        --vscode-button-secondaryForeground: #cccccc;
+        --vscode-editorGroupHeader-tabsBackground: #181818;
+        --vscode-inputValidation-warningBackground: #4d3800;
+        --vscode-inputValidation-warningBorder: #806300;
+        --vscode-testing-iconPassed: #4ec94e;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // Stand in for the webview host so the real bundle runs unmodified.
+      const posted = [];
+      window.__mergeForgePosted = posted;
+      window.acquireVsCodeApi = () => ({
+        postMessage: (message) => {
+          posted.push(message);
+          if (message.type === 'ready') {
+            window.postMessage(window.__mergeForgeInit, '*');
+          }
+        },
+      });
+      window.__mergeForge = { workerUri: '../dist/webview/editor.worker.js' };
+
+      const left = [
+        'function greet(name) {',
+        '  // ours changed this line',
+        '  const greeting = `Hello, ${name}!`;',
+        '  console.log(greeting);',
+        '  return greeting;',
+        '}',
+        '',
+        'const OURS_ONLY = 1;',
+        'export default greet;',
+        '',
+      ].join('\n');
+
+      const base = [
+        'function greet(name) {',
+        '  const greeting = "hi";',
+        '  console.log(greeting);',
+        '  return greeting;',
+        '}',
+        '',
+        'export default greet;',
+        '',
+      ].join('\n');
+
+      const right = [
+        'function greet(name) {',
+        '  // theirs changed this line differently',
+        '  const greeting = `Hi there, ${name}.`;',
+        '  console.log(greeting);',
+        '  return greeting;',
+        '}',
+        '',
+        'function farewell() {',
+        '  return "bye";',
+        '}',
+        '',
+        'export default greet;',
+        '',
+      ].join('\n');
+
+      window.__mergeForgeInit = {
+        type: 'init',
+        payload: {
+          filePath: 'src/greet.js',
+          languageId: 'javascript',
+          left,
+          base,
+          right,
+          labels: { left: 'Yours (local)', right: 'Theirs (incoming)' },
+          eol: { left: 'lf', base: 'lf', right: 'lf', conflict: false, suggested: 'lf' },
+          settings: { autoApplyNonConflicting: false },
+        },
+      };
+    </script>
+    <script src="../dist/webview/main.js"></script>
+  </body>
+</html>

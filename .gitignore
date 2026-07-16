@@ -3,3 +3,6 @@ dist/
 *.vsix
 .DS_Store
 coverage/
+
+# dev harness server artifacts
+.harness-server.pid
