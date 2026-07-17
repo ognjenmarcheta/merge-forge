@@ -1,4 +1,5 @@
 import type { Chunk } from '../src/merge/chunk';
+import type { SideControls } from '../src/merge/resolve';
 import type { CenterRange, PixelExtent } from './alignment';
 import { rowExtent, visualOf } from './alignment';
 import { LINE_HEIGHT, type Panes } from './editors';
@@ -11,9 +12,10 @@ export type StripSide = 'left' | 'right';
 
 export interface ConnectorCallbacks {
   onAccept: (chunkId: number, side: StripSide) => void;
-  onIgnore: (chunkId: number) => void;
-  canAccept: (chunk: Chunk, side: StripSide) => boolean;
-  canIgnore: (chunk: Chunk) => boolean;
+  /** The × for one side: per-side dismiss on conflicts, whole-chunk ignore otherwise. */
+  onDismiss: (chunkId: number, side: StripSide) => void;
+  /** Which controls each side currently offers (see resolve.sideControls). */
+  controls: (chunk: Chunk) => SideControls;
 }
 
 /** Moves a pixel extent into the strip's coordinate space. */
@@ -186,14 +188,18 @@ export class Connectors {
     // Sit the pair on the band's shelf at the chunk's first row, WebStorm-style.
     row.style.top = `${Math.max(0, top + 1)}px`;
 
+    const offered = this.callbacks.controls(chunk);
+    const showAccept = this.side === 'left' ? offered.acceptLeft : offered.acceptRight;
+    const showIgnore = this.side === 'left' ? offered.ignoreLeft : offered.ignoreRight;
+
     // "»" pushes the left side into the result; "«" pulls the right side in.
-    const accept = this.callbacks.canAccept(chunk, this.side)
+    const accept = showAccept
       ? this.glyph(this.side === 'left' ? '»' : '«', 'Accept this change', () =>
           this.callbacks.onAccept(chunk.id, this.side),
         )
       : null;
-    const ignore = this.callbacks.canIgnore(chunk)
-      ? this.glyph('×', 'Ignore this change', () => this.callbacks.onIgnore(chunk.id))
+    const ignore = showIgnore
+      ? this.glyph('×', 'Ignore this change', () => this.callbacks.onDismiss(chunk.id, this.side))
       : null;
 
     // The arrow always sits on the *inner* side (toward the result), × on the outer:

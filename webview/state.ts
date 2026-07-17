@@ -18,7 +18,11 @@ const EDIT_SOURCE = 'mergeForge';
  */
 /** Chunk states and tracker positions as they were at one exact text version. */
 interface Snapshot {
-  states: Chunk['state'][];
+  states: {
+    state: Chunk['state'];
+    dismissedLeft: boolean;
+    dismissedRight: boolean;
+  }[];
   ranges: CenterRange[];
 }
 
@@ -63,7 +67,11 @@ export class ChunkStore {
 
   private snapshot(): void {
     this.history.set(this.model.getAlternativeVersionId(), {
-      states: this.chunks.map((chunk) => chunk.state),
+      states: this.chunks.map((chunk) => ({
+        state: chunk.state,
+        dismissedLeft: chunk.dismissedLeft,
+        dismissedRight: chunk.dismissedRight,
+      })),
       ranges: this.chunks.map((chunk) => this.centerRange(chunk.id)),
     });
     if (this.history.size > ChunkStore.HISTORY_LIMIT) {
@@ -81,10 +89,12 @@ export class ChunkStore {
    */
   private restore(snapshot: Snapshot): void {
     this.chunks.forEach((chunk, index) => {
-      const state = snapshot.states[index];
+      const saved = snapshot.states[index];
       const range = snapshot.ranges[index];
-      if (state !== undefined) {
-        chunk.state = state;
+      if (saved !== undefined) {
+        chunk.state = saved.state;
+        chunk.dismissedLeft = saved.dismissedLeft;
+        chunk.dismissedRight = saved.dismissedRight;
       }
       if (range) {
         this.repin(chunk, range.start, range.end - range.start);
@@ -256,6 +266,36 @@ export class ChunkStore {
 
   acceptSide(chunkId: number, side: Side): boolean {
     return this.apply(chunkId, side === 'left' ? 'acceptLeft' : 'acceptRight');
+  }
+
+  /**
+   * The × on one side of a chunk: "seen it, not taking it."
+   *
+   * For a conflict this is per-side — the result text never changes, the side just stops
+   * offering controls; once every side is applied or dismissed the chunk is settled, and
+   * dismissing both from scratch is the classic keep-base ignore. Non-conflict chunks
+   * keep the whole-chunk ignore. No text edit happens, so this rides the snapshot at the
+   * current text version (overwritten in place) rather than the undo stack.
+   */
+  dismissSide(chunkId: number, side: Side): boolean {
+    const chunk = this.chunks.find((c) => c.id === chunkId);
+    if (!chunk) {
+      return false;
+    }
+    if (chunk.kind !== 'conflict') {
+      return this.apply(chunkId, 'ignore');
+    }
+    if (side === 'left') {
+      chunk.dismissedLeft = true;
+    } else {
+      chunk.dismissedRight = true;
+    }
+    if (chunk.state === 'initial' && chunk.dismissedLeft && chunk.dismissedRight) {
+      chunk.state = 'ignored';
+    }
+    this.snapshot();
+    this.onChange();
+    return true;
   }
 
   /**

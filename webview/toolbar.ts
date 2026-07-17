@@ -56,7 +56,7 @@ function separator(): HTMLElement {
 }
 
 export interface Toolbar {
-  update: (chunks: readonly Chunk[], magicAvailable: boolean) => void;
+  update: (chunks: readonly Chunk[]) => void;
   /** Reverts the whitespace dropdown, for when the user cancels the recompute. */
   setWhitespaceValue: (mode: WhitespaceMode) => void;
 }
@@ -79,13 +79,7 @@ export function buildToolbar(
   const fromRight = button('⇤', 'Apply non-conflicting changes from the right side', () =>
     actions.applyNonConflictingFrom('right'),
   );
-  // One button does the whole safe sweep: every one-sided change, plus the "magic"
-  // conflicts where both sides simply added lines — hence the wand.
-  const applyAll = button(
-    '✦',
-    'Apply all non-conflicting changes (including simple conflicts where both sides added lines)',
-    actions.applyAllNonConflicting,
-  );
+  const applyAll = button('✦', 'Apply all non-conflicting changes', actions.applyAllNonConflicting);
 
   const whitespace = select<WhitespaceMode>(
     'How whitespace differences are treated when comparing',
@@ -121,12 +115,12 @@ export function buildToolbar(
   );
 
   return {
-    update(chunks, magicAvailable) {
+    update(chunks) {
       const pending = chunks.filter((c) => c.state === 'initial');
       const nonConflicting = pending.filter((c) => c.kind !== 'conflict').length;
       const conflicts = pending.filter((c) => c.kind === 'conflict').length;
 
-      applyAll.toggleAttribute('disabled', nonConflicting === 0 && !magicAvailable);
+      applyAll.toggleAttribute('disabled', nonConflicting === 0);
       fromLeft.toggleAttribute('disabled', nonConflicting === 0);
       fromRight.toggleAttribute('disabled', nonConflicting === 0);
       previous.toggleAttribute('disabled', chunks.length === 0);

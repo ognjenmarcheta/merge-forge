@@ -1,7 +1,7 @@
 import './styles.css';
 import type { Chunk } from '../src/merge/chunk';
 import { computeChunks, splitLines, type WhitespaceMode } from '../src/merge/engine';
-import { canAccept, canIgnore, canMagicResolve, nonConflictingAction } from '../src/merge/resolve';
+import { nonConflictingAction, sideControls } from '../src/merge/resolve';
 import { wordHighlights } from '../src/merge/wordDiff';
 import type {
   Eol,
@@ -112,7 +112,7 @@ function refresh(): void {
     session.highlight === 'words' ? session.wordRanges : undefined,
   );
   redrawConnectors();
-  session.toolbar.update(chunks, chunks.some(canMagicResolve));
+  session.toolbar.update(chunks);
   // WebStorm's completion card: floats over the result once nothing needs deciding,
   // and disappears again the moment any chunk reopens (e.g. via undo).
   const allProcessed = chunks.length > 0 && chunks.every((c) => c.state !== 'initial');
@@ -167,19 +167,13 @@ function navigate(direction: 1 | -1): void {
 }
 
 /**
- * The whole safe sweep: every change only one side made, plus the "magic" conflicts
- * where both sides simply added lines (kept in left-then-right order). One button,
- * because neither part ever needs a human decision.
+ * Applies every change only one side made. Strictly non-conflicting: a conflict —
+ * including two sides inserting different versions of the same new code — never has an
+ * automatic answer, and concatenating "both added" variants duplicates real functions
+ * (found in the field). Red stays red until a human decides.
  */
 function applyAllSafe(): void {
-  if (!session) {
-    return;
-  }
-  session.store.applyMany((chunk) => nonConflictingAction(chunk));
-  session.store.applyMany((chunk) => (canMagicResolve(chunk) ? 'acceptLeft' : null));
-  session.store.applyMany((chunk) =>
-    chunk.bothInserted && chunk.state === 'appliedLeft' ? 'acceptRight' : null,
-  );
+  session?.store.applyMany((chunk) => nonConflictingAction(chunk));
 }
 
 function runAction(action: MergeAction): void {
@@ -307,9 +301,9 @@ function start(payload: InitPayload): void {
 
   const callbacks = {
     onAccept: (chunkId: number, side: 'left' | 'right') => session?.store.acceptSide(chunkId, side),
-    onIgnore: (chunkId: number) => session?.store.apply(chunkId, 'ignore'),
-    canAccept: (chunk: Chunk, side: 'left' | 'right') => canAccept(chunk, side),
-    canIgnore: (chunk: Chunk) => canIgnore(chunk),
+    onDismiss: (chunkId: number, side: 'left' | 'right') =>
+      session?.store.dismissSide(chunkId, side),
+    controls: (chunk: Chunk) => sideControls(chunk),
   };
 
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {

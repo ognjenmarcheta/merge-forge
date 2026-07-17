@@ -25,8 +25,16 @@ export type Side = 'left' | 'right';
 export interface Chunk {
   id: number;
   kind: ChunkKind;
-  /** True when both sides inserted at the same empty base range — the Magic Resolve case. */
+  /** True when both sides inserted at the same empty base range (metadata only). */
   bothInserted: boolean;
+  /**
+   * Per-side dismissal for conflicts: "I have seen this side's change and decided not to
+   * take it." A conflict side keeps offering accept and dismiss until it is applied or
+   * dismissed — matching JetBrains, where taking one side leaves the other side's
+   * controls in place. Meaningless for non-conflict kinds.
+   */
+  dismissedLeft: boolean;
+  dismissedRight: boolean;
   base: LineRange;
   left: LineRange;
   right: LineRange;

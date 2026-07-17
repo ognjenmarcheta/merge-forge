@@ -265,6 +265,8 @@ export function computeChunks(
         isEmptyRange(baseRange) &&
         !isEmptyRange(leftRange) &&
         !isEmptyRange(rightRange),
+      dismissedLeft: false,
+      dismissedRight: false,
       base: baseRange,
       left: leftRange,
       right: rightRange,

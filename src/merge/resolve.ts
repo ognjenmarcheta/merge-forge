@@ -105,13 +105,56 @@ export function nonConflictingAction(
   }
 }
 
+/** What the gutter strips may offer for one chunk, per side. */
+export interface SideControls {
+  acceptLeft: boolean;
+  acceptRight: boolean;
+  ignoreLeft: boolean;
+  ignoreRight: boolean;
+}
+
+const NOTHING: SideControls = {
+  acceptLeft: false,
+  acceptRight: false,
+  ignoreLeft: false,
+  ignoreRight: false,
+};
+
 /**
- * Whether "Magic Resolve" can settle this conflict on its own.
+ * The single source of truth for which controls each strip shows.
  *
- * Only same-anchor insertions qualify: both sides added lines where base had none, so
- * keeping both loses nothing. Anything else — two different rewrites of the same lines —
- * has no defensible automatic answer, and guessing would silently drop someone's work.
+ * For conflicts, each side is its own decision: it keeps offering accept AND dismiss
+ * until that side is applied into the result or explicitly dismissed — so taking the
+ * right side leaves `»` and `×` alive on the left, the JetBrains behaviour. Ignored and
+ * hand-edited chunks are settled outright and offer nothing anywhere.
  */
-export function canMagicResolve(chunk: Chunk): boolean {
-  return chunk.kind === 'conflict' && chunk.bothInserted && chunk.state === 'initial';
+export function sideControls(chunk: Chunk): SideControls {
+  if (chunk.state === 'ignored' || chunk.state === 'manuallyEdited') {
+    return NOTHING;
+  }
+
+  if (chunk.kind === 'conflict') {
+    const leftLive =
+      chunk.state !== 'appliedLeft' && chunk.state !== 'appliedBoth' && !chunk.dismissedLeft;
+    const rightLive =
+      chunk.state !== 'appliedRight' && chunk.state !== 'appliedBoth' && !chunk.dismissedRight;
+    return {
+      acceptLeft: leftLive,
+      acceptRight: rightLive,
+      ignoreLeft: leftLive,
+      ignoreRight: rightLive,
+    };
+  }
+
+  // Non-conflict kinds are a single decision: everything shows while untouched,
+  // nothing after.
+  if (chunk.state !== 'initial') {
+    return NOTHING;
+  }
+  return {
+    acceptLeft: canAccept(chunk, 'left'),
+    acceptRight: canAccept(chunk, 'right'),
+    ignoreLeft: canAccept(chunk, 'left'),
+    ignoreRight: canAccept(chunk, 'right'),
+  };
 }

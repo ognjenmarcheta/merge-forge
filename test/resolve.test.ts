@@ -4,10 +4,10 @@ import { computeChunks, joinLines } from '../src/merge/engine';
 import {
   canAccept,
   canIgnore,
-  canMagicResolve,
   chunkTexts,
   nonConflictingAction,
   resolveAction,
+  sideControls,
   textForState,
 } from '../src/merge/resolve';
 
@@ -159,36 +159,93 @@ describe('nonConflictingAction', () => {
   });
 });
 
-describe('canMagicResolve', () => {
-  test('offers itself when both sides inserted at the same point', () => {
-    const chunk = computeChunks(lines('a', 'z'), lines('a', 'L', 'z'), lines('a', 'R', 'z'))[0]!;
-    expect(chunk.bothInserted).toBe(true);
-    expect(canMagicResolve(chunk)).toBe(true);
+describe('sideControls — the per-side conflict matrix', () => {
+  const conflict = () =>
+    computeChunks(lines('a', 'b', 'z'), lines('a', 'L', 'z'), lines('a', 'R', 'z'))[0]!;
+
+  test('a pending conflict offers accept and dismiss on both sides', () => {
+    expect(sideControls(conflict())).toEqual({
+      acceptLeft: true,
+      acceptRight: true,
+      ignoreLeft: true,
+      ignoreRight: true,
+    });
   });
 
-  test('refuses a genuine rewrite of the same lines, where keeping both would be wrong', () => {
+  test('after taking one side, the other side still offers BOTH controls', () => {
+    const chunk = { ...conflict(), state: 'appliedRight' as const };
+    expect(sideControls(chunk)).toEqual({
+      acceptLeft: true,
+      acceptRight: false,
+      ignoreLeft: true,
+      ignoreRight: false,
+    });
+  });
+
+  test('a dismissed side goes quiet while the other stays live', () => {
+    const chunk = { ...conflict(), dismissedLeft: true };
+    expect(sideControls(chunk)).toEqual({
+      acceptLeft: false,
+      acceptRight: true,
+      ignoreLeft: false,
+      ignoreRight: true,
+    });
+  });
+
+  test('applied one side and dismissed the other: nothing left to offer', () => {
+    const chunk = { ...conflict(), state: 'appliedRight' as const, dismissedLeft: true };
+    expect(sideControls(chunk)).toEqual({
+      acceptLeft: false,
+      acceptRight: false,
+      ignoreLeft: false,
+      ignoreRight: false,
+    });
+  });
+
+  test('both sides taken (appliedBoth) offers nothing', () => {
+    const chunk = { ...conflict(), state: 'appliedBoth' as const };
+    expect(Object.values(sideControls(chunk)).every((v) => v === false)).toBe(true);
+  });
+
+  test('ignored and manually edited chunks offer nothing', () => {
+    for (const state of ['ignored', 'manuallyEdited'] as const) {
+      const chunk = { ...conflict(), state };
+      expect(Object.values(sideControls(chunk)).every((v) => v === false)).toBe(true);
+    }
+  });
+
+  test('a one-sided chunk keeps the old behaviour: controls on its side while initial', () => {
+    const base = lines('a', 'b', 'z');
+    const oneSided = computeChunks(base, lines('a', 'L', 'z'), base)[0]!;
+    expect(sideControls(oneSided)).toEqual({
+      acceptLeft: true,
+      acceptRight: false,
+      ignoreLeft: true,
+      ignoreRight: false,
+    });
+    expect(
+      Object.values(sideControls({ ...oneSided, state: 'appliedLeft' as const })).every(
+        (v) => v === false,
+      ),
+    ).toBe(true);
+  });
+
+  test('bothIdentical offers a single decision from either side', () => {
     const chunk = computeChunks(
       lines('a', 'b', 'z'),
-      lines('a', 'L', 'z'),
-      lines('a', 'R', 'z'),
+      lines('a', 'X', 'z'),
+      lines('a', 'X', 'z'),
     )[0]!;
-    expect(canMagicResolve(chunk)).toBe(false);
-  });
-
-  test('refuses a chunk that is already decided', () => {
-    const chunk = {
-      ...computeChunks(lines('a', 'z'), lines('a', 'L', 'z'), lines('a', 'R', 'z'))[0]!,
-      state: 'appliedLeft' as const,
-    };
-    expect(canMagicResolve(chunk)).toBe(false);
-  });
-
-  test('magic resolving keeps both insertions', () => {
-    const base = lines('a', 'z');
-    const left = lines('a', 'L', 'z');
-    const right = lines('a', 'R', 'z');
-    const chunk = computeChunks(base, left, right)[0]!;
-    const texts = chunkTexts(chunk, base, left, right);
-    expect(textForState(texts, 'appliedBoth')).toEqual(['L\n', 'R\n']);
+    expect(sideControls(chunk)).toEqual({
+      acceptLeft: true,
+      acceptRight: true,
+      ignoreLeft: true,
+      ignoreRight: true,
+    });
+    expect(
+      Object.values(sideControls({ ...chunk, state: 'appliedBoth' as const })).every(
+        (v) => v === false,
+      ),
+    ).toBe(true);
   });
 });
