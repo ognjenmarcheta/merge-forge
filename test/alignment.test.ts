@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { computeSegments, computeSpacers, rowExtent, type CenterRange } from '../webview/alignment';
+import {
+  baseLineNumbers,
+  computeSegments,
+  computeSpacers,
+  rowExtent,
+  type CenterRange,
+} from '../webview/alignment';
 import { computeChunks } from '../src/merge/engine';
 import { splitLines } from '../src/merge/engine';
 
@@ -190,5 +196,56 @@ describe('computeSegments — center tracking', () => {
       total + spacers[pane].reduce((sum, s) => sum + s.heightInLines, 0);
     expect(padded('center', totals.center)).toBe(padded('left', totals.left));
     expect(padded('right', totals.right)).toBe(padded('left', totals.left));
+  });
+});
+
+describe('baseLineNumbers', () => {
+  const render = (
+    chunks: ReadonlyArray<{ id: number; base: CenterRange }>,
+    centerRanges: Map<number, CenterRange>,
+    baseTotal: number,
+    centerTotal: number,
+  ) => {
+    const fn = baseLineNumbers(chunks, centerRanges, baseTotal);
+    return Array.from({ length: centerTotal }, (_, i) => fn(i + 1));
+  };
+
+  test('identity when there are no chunks', () => {
+    expect(render([], new Map(), 3, 3)).toEqual(['1', '2', '3']);
+  });
+
+  test('dot inside a chunk, identity around an equal-size replacement', () => {
+    // Chunk replaces base line 2 (0-based 1..2) with one center line at the same spot.
+    const chunks = [{ id: 0, base: { start: 1, end: 2 } }];
+    const centerRanges = new Map([[0, { start: 1, end: 2 }]]);
+    expect(render(chunks, centerRanges, 3, 3)).toEqual(['1', '·', '3']);
+  });
+
+  test('lines after a grown chunk keep their base numbers', () => {
+    // Base line 2 was replaced by three center lines: center grew by 2.
+    const chunks = [{ id: 0, base: { start: 1, end: 2 } }];
+    const centerRanges = new Map([[0, { start: 1, end: 4 }]]);
+    expect(render(chunks, centerRanges, 3, 5)).toEqual(['1', '·', '·', '·', '3']);
+  });
+
+  test('lines after a shrunk chunk keep their base numbers', () => {
+    // Base lines 2-3 collapsed to nothing (deletion accepted): center shrank by 2.
+    const chunks = [{ id: 0, base: { start: 1, end: 3 } }];
+    const centerRanges = new Map([[0, { start: 1, end: 1 }]]);
+    expect(render(chunks, centerRanges, 4, 2)).toEqual(['1', '4']);
+  });
+
+  test('two chunks accumulate drift independently', () => {
+    // First chunk grows by 1, second is a pure insertion (no base lines).
+    const chunks = [
+      { id: 0, base: { start: 0, end: 1 } },
+      { id: 1, base: { start: 2, end: 2 } },
+    ];
+    const centerRanges = new Map([
+      [0, { start: 0, end: 2 }],
+      [1, { start: 3, end: 4 }],
+    ]);
+    // Base: [A, B, C] → center: [a1, a2, B, ins, C]
+    expect(render(chunks, centerRanges, 3, 5)).toEqual(['·', '·', '2', '·', '3']);
   });
 });

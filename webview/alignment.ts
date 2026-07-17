@@ -108,6 +108,47 @@ export function computeSegments(
   return segments;
 }
 
+/**
+ * Maps center-pane lines back to base (original) line numbers, JetBrains-style.
+ *
+ * Returns a renderer for Monaco's `lineNumbers` option: 1-based center line in,
+ * the 1-based base line as a string out — or `'·'` for lines inside a chunk, where
+ * the base text has been replaced and no original number exists.
+ *
+ * Stable text between chunks has equal length in base and center, so outside chunks
+ * the mapping is a running offset; each chunk shifts it by (base span − center span).
+ */
+export function baseLineNumbers(
+  chunks: ReadonlyArray<{ id: number; base: CenterRange }>,
+  centerRanges: ReadonlyMap<number, CenterRange>,
+  baseTotalLines: number,
+): (lineNumber: number) => string {
+  // Snapshot the ranges: Monaco calls the renderer lazily during paint.
+  const rows = chunks
+    .map((chunk) => ({
+      center: centerRanges.get(chunk.id) ?? { start: chunk.base.start, end: chunk.base.end },
+      baseEnd: chunk.base.end,
+    }))
+    .sort((a, b) => a.center.start - b.center.start);
+  return (lineNumber) => {
+    const line = lineNumber - 1;
+    let centerCursor = 0;
+    let baseCursor = 0;
+    for (const row of rows) {
+      if (line < row.center.start) {
+        break; // in the stable text before this chunk
+      }
+      if (line < row.center.end) {
+        return '·';
+      }
+      centerCursor = row.center.end;
+      baseCursor = row.baseEnd;
+    }
+    const base = baseCursor + (line - centerCursor);
+    return base < baseTotalLines ? String(base + 1) : '';
+  };
+}
+
 /** A vertical pixel span within a pane. */
 export interface PixelExtent {
   top: number;

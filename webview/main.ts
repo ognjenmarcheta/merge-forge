@@ -11,7 +11,7 @@ import type {
   MergeAction,
   WebviewToHostMessage,
 } from '../src/protocol';
-import { computeSegments, computeSpacers } from './alignment';
+import { baseLineNumbers, computeSegments, computeSpacers } from './alignment';
 import { Connectors } from './connectors';
 import { renderDecorations, type ChunkWordRanges } from './decorations';
 import { createPanes, type Panes } from './editors';
@@ -68,6 +68,8 @@ let session: Session | undefined;
 let drawer: ExplainDrawer | undefined;
 let cursor = -1;
 let flashTimer: number | undefined;
+/** Last applied base↔center mapping, so the margin only repaints when ranges move. */
+let lineNumbersSignature = '';
 
 /** Word-level emphasis per chunk, computed once — base and side texts never change. */
 function computeWordRanges(chunks: readonly Chunk[], payload: InitPayload) {
@@ -126,12 +128,43 @@ function refresh(): void {
     },
   );
   redrawConnectors();
+  updateBaseLineNumbers(centerRanges);
   session.toolbar.update(chunks);
   // WebStorm's completion card: floats over the result once nothing needs deciding,
   // and disappears again the moment any chunk reopens (e.g. via undo).
   const allProcessed = chunks.length > 0 && chunks.every((c) => c.state !== 'initial');
   session.layout.doneCard.classList.toggle('mf-hidden', !allProcessed);
   postState();
+}
+
+/**
+ * JetBrains shows the original (base) line number next to the current one in the
+ * result pane. Rebuilding the renderer forces a margin repaint, so it only happens
+ * when a chunk's mapping actually moved — not on hover or flash refreshes.
+ */
+function updateBaseLineNumbers(centerRanges: ReadonlyMap<number, { start: number; end: number }>) {
+  if (!session) {
+    return;
+  }
+  const signature = session.chunks
+    .map((chunk) => {
+      const range = centerRanges.get(chunk.id);
+      return `${chunk.id}:${chunk.base.start}-${chunk.base.end}:${range?.start}-${range?.end}`;
+    })
+    .join(',');
+  if (signature === lineNumbersSignature) {
+    return;
+  }
+  lineNumbersSignature = signature;
+  const baseTotal = splitLines(session.payload.base).length;
+  const baseFor = baseLineNumbers(session.chunks, centerRanges, baseTotal);
+  session.panes.center.updateOptions({
+    lineNumbersMinChars: 7,
+    lineNumbers: (lineNumber: number) => {
+      const base = baseFor(lineNumber);
+      return base === '' ? String(lineNumber) : `${base} ${lineNumber}`;
+    },
+  });
 }
 
 function redrawConnectors(): void {
@@ -311,6 +344,7 @@ function buildSession(whitespace: WhitespaceMode): void {
   cursor = -1;
   session.currentChunkId = undefined;
   session.flashChunkId = undefined;
+  lineNumbersSignature = '';
   refresh();
 }
 
