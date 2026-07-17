@@ -19,3 +19,21 @@ First working version: a JetBrains-style three-pane merge conflict resolver.
 - Handles both-added files, rebase/cherry-pick stage swapping, and delete/modify conflicts.
 - Entry points: editor title button, CodeLens, Explorer and SCM context menus, command
   palette, and an optional auto-open setting.
+
+## 0.2.0 — unreleased
+
+The full JetBrains merge flow around the editor:
+
+- **Merge indicator cluster** in the status bar while a merge/rebase/cherry-pick is in
+  progress: "⚠ Merging <branch> → <branch>" pill, `»` opens the Conflicts dialog, red `×`
+  aborts the operation behind a confirmation.
+- **Conflicts dialog**: directory-grouped file list with Yours/Theirs status columns,
+  multi-select, Accept Yours / Accept Theirs / Merge…; auto-opens when conflicts appear
+  (`mergeForge.autoShowConflicts`). Accept Yours/Theirs also resolves delete/modify
+  conflicts, including correct side mapping during rebases.
+- **Merge window**: JetBrains-style toolbar with whitespace-handling and highlight-mode
+  dropdowns, "N changes. M conflicts." counter, "Changes from <branch>" pane headers,
+  word-level diff highlights, Accept Left/Right whole-file buttons, Cancel/Apply footer.
+- Undoing a whole-file accept reverses it in one step; changing whitespace handling
+  recomputes changes behind an inline confirmation.
+- The per-file status-bar hint and toast were replaced by the cluster + dialog.
