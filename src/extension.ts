@@ -2,29 +2,44 @@ import * as vscode from 'vscode';
 import { listConflicted } from './git/conflicts';
 import { detectOperation } from './git/repoContext';
 import { readStages } from './git/stages';
+import { ConflictsPanel } from './panel/ConflictsPanel';
 import { MergePanel } from './panel/MergePanel';
 import { ConflictCodeLensProvider } from './ui/codeLens';
-import { activeRepoRoot, pickConflictedFile } from './ui/conflictPicker';
+import { activeRepoRoot } from './ui/conflictPicker';
 import { ContextKeys } from './ui/contextKeys';
-import { ResolveHint } from './ui/resolveHint';
+import { confirmAndAbort, MergeStatusCluster } from './ui/mergeStatus';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const hint = new ResolveHint(context);
+  const cluster = new MergeStatusCluster(context);
   let conflictedPaths = new Set<string>();
-  const isConflicted = (editor: vscode.TextEditor | undefined): boolean =>
-    editor !== undefined && conflictedPaths.has(editor.document.uri.fsPath);
+  let knownRepoRoot: string | undefined;
 
-  // ContextKeys owns the single .git/index watcher; every other affordance — the menus'
-  // context keys, the CodeLens, the status-bar hint — follows its refreshes.
-  const contextKeys = new ContextKeys(context, (absolutePaths) => {
+  // ContextKeys owns the single .git/index watcher; the menus' context keys, the
+  // CodeLens, the status cluster, and the Conflicts dialog all follow its refreshes.
+  const contextKeys = new ContextKeys(context, (absolutePaths, repoRoot) => {
+    const hadConflicts = conflictedPaths.size > 0;
     conflictedPaths = new Set(absolutePaths);
+    knownRepoRoot = repoRoot;
     codeLens.refresh();
-    hint.update(vscode.window.activeTextEditor, isConflicted(vscode.window.activeTextEditor));
+    void cluster.refresh(repoRoot);
+    ConflictsPanel.refresh();
+    // JetBrains pops its Conflicts dialog the moment a merge hits conflicts.
+    if (!hadConflicts && conflictedPaths.size > 0 && repoRoot && readAutoShow()) {
+      ConflictsPanel.show(context, repoRoot);
+    }
   });
   contextKeys.register();
 
-  const refreshConflicted = (): Promise<void> => contextKeys.refresh();
   const codeLens = new ConflictCodeLensProvider((uri) => conflictedPaths.has(uri.fsPath));
+
+  const showConflicts = async (): Promise<void> => {
+    const repoRoot = knownRepoRoot ?? (await activeRepoRoot());
+    if (!repoRoot) {
+      void vscode.window.showErrorMessage('Merge Forge: no git repository found.');
+      return;
+    }
+    ConflictsPanel.show(context, repoRoot);
+  };
 
   const open = async (uri?: vscode.Uri): Promise<void> => {
     const target = uri ?? vscode.window.activeTextEditor?.document.uri;
@@ -34,26 +49,32 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     await MergePanel.createOrShow(context, target);
     await contextKeys.refresh();
-    await refreshConflicted();
-  };
-
-  const pickAndOpen = async (): Promise<void> => {
-    const picked = await pickConflictedFile();
-    if (picked) {
-      await open(picked);
-    }
   };
 
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider({ scheme: 'file' }, codeLens),
-    vscode.commands.registerCommand('mergeForge.resolve', pickAndOpen),
-    vscode.commands.registerCommand('mergeForge.pickConflicted', pickAndOpen),
-    // The SCM view hands over a resource state rather than a Uri.
+    vscode.commands.registerCommand('mergeForge.showConflicts', showConflicts),
+    // Both older entry points now lead to the dialog too — one flow, one list.
+    vscode.commands.registerCommand('mergeForge.resolve', showConflicts),
+    vscode.commands.registerCommand('mergeForge.pickConflicted', showConflicts),
     vscode.commands.registerCommand(
       'mergeForge.resolveThis',
       (arg?: vscode.Uri | { resourceUri?: vscode.Uri }) =>
         open(arg instanceof vscode.Uri ? arg : arg?.resourceUri),
     ),
+    vscode.commands.registerCommand('mergeForge.abortMerge', async () => {
+      const repoRoot = knownRepoRoot ?? (await activeRepoRoot());
+      const operation = repoRoot ? await detectOperation(repoRoot) : undefined;
+      if (!repoRoot || !operation || operation.kind === 'unknown') {
+        void vscode.window.showInformationMessage(
+          'Merge Forge: no merge, rebase, or cherry-pick is in progress.',
+        );
+        return;
+      }
+      if (await confirmAndAbort(repoRoot, operation)) {
+        await contextKeys.refresh();
+      }
+    }),
     vscode.commands.registerCommand('mergeForge.nextChange', () =>
       MergePanel.runOnActive('nextChange'),
     ),
@@ -65,21 +86,21 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('mergeForge.diagnostics', () => showDiagnostics(context)),
     vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-      const conflicted = isConflicted(editor);
-      hint.update(editor, conflicted);
       // Opening a conflicted file can jump straight into the merge editor, for people
       // who would rather never see the markers.
-      if (editor && conflicted && readAutoOpen()) {
+      if (editor && readAutoOpen() && conflictedPaths.has(editor.document.uri.fsPath)) {
         await MergePanel.createOrShow(context, editor.document.uri);
       }
     }),
   );
-
-  void refreshConflicted();
 }
 
 function readAutoOpen(): boolean {
   return vscode.workspace.getConfiguration('mergeForge').get<boolean>('autoOpenOnConflict', false);
+}
+
+function readAutoShow(): boolean {
+  return vscode.workspace.getConfiguration('mergeForge').get<boolean>('autoShowConflicts', true);
 }
 
 /**

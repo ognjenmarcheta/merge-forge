@@ -62,6 +62,14 @@
       {
         "command": "mergeForge.diagnostics",
         "title": "Merge Forge: Show Git Diagnostics"
+      },
+      {
+        "command": "mergeForge.showConflicts",
+        "title": "Merge Forge: Show Conflicts"
+      },
+      {
+        "command": "mergeForge.abortMerge",
+        "title": "Merge Forge: Abort Merge / Rebase / Cherry-Pick"
       }
     ],
     "menus": {
@@ -124,6 +132,11 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically open the Merge Forge editor when opening a file with merge conflicts."
+        },
+        "mergeForge.autoShowConflicts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Conflicts dialog automatically when a merge, rebase, or cherry-pick hits conflicts."
         },
         "mergeForge.lineEnding": {
           "type": "string",

@@ -169,7 +169,9 @@ function slice(lines: readonly string[], range: LineRange): string[] {
 }
 
 function sameLines(a: readonly string[], b: readonly string[], mode: WhitespaceMode): boolean {
-  return a.length === b.length && a.every((line, i) => lineKey(line, mode) === lineKey(b[i]!, mode));
+  return (
+    a.length === b.length && a.every((line, i) => lineKey(line, mode) === lineKey(b[i]!, mode))
+  );
 }
 
 function subtypeOf(changed: boolean, base: LineRange, side: LineRange): ChunkSubtype {

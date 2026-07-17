@@ -57,9 +57,14 @@ describe('whitespace modes', () => {
   });
 
   test('sides equal modulo whitespace classify as bothIdentical, not conflict', () => {
-    const chunks = computeChunks(lines('a', 'b', 'z'), lines('a', 'B ', 'z'), lines('a', 'B', 'z'), {
-      whitespace: 'trim',
-    });
+    const chunks = computeChunks(
+      lines('a', 'b', 'z'),
+      lines('a', 'B ', 'z'),
+      lines('a', 'B', 'z'),
+      {
+        whitespace: 'trim',
+      },
+    );
     expect(chunks.map((c) => c.kind)).toEqual(['bothIdentical']);
   });
 

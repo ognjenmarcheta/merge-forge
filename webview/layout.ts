@@ -3,6 +3,8 @@ import type { PaneName } from './panes';
 export interface Layout {
   root: HTMLElement;
   banner: HTMLElement;
+  /** A second banner row for inline confirmations (e.g. whitespace-mode reset). */
+  confirmBar: HTMLElement;
   toolbar: HTMLElement;
   counter: HTMLElement;
   hosts: Record<PaneName, HTMLElement>;
@@ -36,23 +38,26 @@ export function buildLayout(
   filePath: string,
 ): Layout {
   const banner = element('div', 'mf-banner mf-hidden');
+  const confirmBar = element('div', 'mf-banner mf-hidden');
   const toolbar = element('div', 'mf-toolbar');
   const counter = element('div', 'mf-counter');
   const panes = element('div', 'mf-panes');
   const footer = element('div', 'mf-footer');
 
-  const left = pane(labels.left);
+  // JetBrains headers: the sides say where the changes come from; the middle is yours.
+  const left = pane(`Changes from ${labels.left}`);
   const center = pane(`Result — ${filePath}`);
-  const right = pane(labels.right);
+  const right = pane(`Changes from ${labels.right}`);
   const leftStrip = element('div', 'mf-strip');
   const rightStrip = element('div', 'mf-strip');
 
   panes.append(left.pane, leftStrip, center.pane, rightStrip, right.pane);
-  root.replaceChildren(banner, toolbar, panes, footer);
+  root.replaceChildren(banner, confirmBar, toolbar, panes, footer);
 
   return {
     root,
     banner,
+    confirmBar,
     toolbar,
     counter,
     hosts: { left: left.host, center: center.host, right: right.host },

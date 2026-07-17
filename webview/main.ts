@@ -1,7 +1,8 @@
 import './styles.css';
 import type { Chunk } from '../src/merge/chunk';
-import { computeChunks } from '../src/merge/engine';
+import { computeChunks, splitLines, type WhitespaceMode } from '../src/merge/engine';
 import { canAccept, canIgnore, canMagicResolve, nonConflictingAction } from '../src/merge/resolve';
+import { wordHighlights } from '../src/merge/wordDiff';
 import type {
   Eol,
   HostToWebviewMessage,
@@ -11,7 +12,7 @@ import type {
 } from '../src/protocol';
 import { computeSegments, computeSpacers } from './alignment';
 import { Connectors } from './connectors';
-import { renderDecorations } from './decorations';
+import { renderDecorations, type ChunkWordRanges } from './decorations';
 import { createPanes, type Panes } from './editors';
 import { buildLayout } from './layout';
 import { configureMonacoWorker } from './monaco';
@@ -20,7 +21,7 @@ import type { PaneName } from './panes';
 import { syncScrolling } from './scrollSync';
 import { ChunkStore } from './state';
 import { applyTheme, watchTheme } from './theme';
-import { buildFooter, buildToolbar, type Toolbar } from './toolbar';
+import { buildFooter, buildToolbar, type HighlightMode, type Toolbar } from './toolbar';
 import { applySpacers, emptyZoneIds } from './viewZones';
 
 interface VsCodeApi {
@@ -41,9 +42,14 @@ if (!app) {
 }
 
 interface Session {
+  payload: InitPayload;
+  layout: ReturnType<typeof buildLayout>;
   panes: Panes;
   store: ChunkStore;
   chunks: Chunk[];
+  wordRanges: Map<number, ChunkWordRanges>;
+  whitespace: WhitespaceMode;
+  highlight: HighlightMode;
   connectors: { left: Connectors; right: Connectors };
   collections: Record<PaneName, monaco.editor.IEditorDecorationsCollection>;
   zoneIds: ReturnType<typeof emptyZoneIds>;
@@ -53,6 +59,28 @@ interface Session {
 
 let session: Session | undefined;
 let cursor = -1;
+
+/** Word-level emphasis per chunk, computed once — base and side texts never change. */
+function computeWordRanges(chunks: readonly Chunk[], payload: InitPayload) {
+  const map = new Map<number, ChunkWordRanges>();
+  const baseLines = splitLines(payload.base);
+  const leftLines = splitLines(payload.left);
+  const rightLines = splitLines(payload.right);
+  for (const chunk of chunks) {
+    const baseSlice = baseLines.slice(chunk.base.start, chunk.base.end);
+    map.set(chunk.id, {
+      left:
+        chunk.leftSubtype === 'modified'
+          ? wordHighlights(baseSlice, leftLines.slice(chunk.left.start, chunk.left.end))
+          : [],
+      right:
+        chunk.rightSubtype === 'modified'
+          ? wordHighlights(baseSlice, rightLines.slice(chunk.right.start, chunk.right.end))
+          : [],
+    });
+  }
+  return map;
+}
 
 /**
  * Recomputes layout and repaints from current state.
@@ -77,7 +105,12 @@ function refresh(): void {
     computeSpacers(computeSegments(chunks, centerRanges, totals)),
     session.zoneIds,
   );
-  renderDecorations(chunks, centerRanges, session.collections);
+  renderDecorations(
+    chunks,
+    centerRanges,
+    session.collections,
+    session.highlight === 'words' ? session.wordRanges : undefined,
+  );
   redrawConnectors();
   session.toolbar.update(chunks, chunks.some(canMagicResolve));
   postState();
@@ -156,6 +189,79 @@ function requestApply(): void {
   post({ type: 'apply', payload: { content: session.store.result(), eol: session.zone } });
 }
 
+/**
+ * Builds (or rebuilds) the chunk model over the existing panes. Rebuilding happens when
+ * the whitespace mode changes: the center resets to base and every decision starts over,
+ * because chunks computed under one mode don't map onto ranges computed under another.
+ */
+function buildSession(whitespace: WhitespaceMode): void {
+  if (!session) {
+    return;
+  }
+  session.store.dispose();
+  session.panes.center.getModel()?.setValue(session.payload.base);
+
+  const chunks = computeChunks(session.payload.base, session.payload.left, session.payload.right, {
+    whitespace,
+  });
+  session.chunks = chunks;
+  session.whitespace = whitespace;
+  session.wordRanges = computeWordRanges(chunks, session.payload);
+  session.store = new ChunkStore(
+    chunks,
+    session.panes.center,
+    session.payload.base,
+    session.payload.left,
+    session.payload.right,
+    () => refresh(),
+  );
+  cursor = -1;
+  refresh();
+}
+
+/** Asks an inline yes/no in the confirm bar; resolves false on cancel. */
+function confirmInBar(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const bar = session?.layout.confirmBar;
+    if (!bar) {
+      resolve(false);
+      return;
+    }
+    const finish = (answer: boolean) => {
+      bar.classList.add('mf-hidden');
+      bar.replaceChildren();
+      resolve(answer);
+    };
+    const text = document.createElement('span');
+    text.textContent = message;
+    const yes = document.createElement('button');
+    yes.textContent = 'Continue';
+    yes.addEventListener('click', () => finish(true));
+    const no = document.createElement('button');
+    no.textContent = 'Cancel';
+    no.addEventListener('click', () => finish(false));
+    bar.replaceChildren(text, yes, no);
+    bar.classList.remove('mf-hidden');
+  });
+}
+
+async function changeWhitespace(mode: WhitespaceMode): Promise<void> {
+  if (!session || mode === session.whitespace) {
+    return;
+  }
+  const hasProgress = session.chunks.some((chunk) => chunk.state !== 'initial');
+  if (hasProgress) {
+    const proceed = await confirmInBar(
+      'Changing whitespace handling recomputes the changes and resets your progress in this file.',
+    );
+    if (!proceed) {
+      session.toolbar.setWhitespaceValue(session.whitespace);
+      return;
+    }
+  }
+  buildSession(mode);
+}
+
 function start(payload: InitPayload): void {
   const layout = buildLayout(app!, payload.labels, payload.filePath);
   applyTheme();
@@ -180,30 +286,48 @@ function start(payload: InitPayload): void {
   );
 
   const callbacks = {
-    onAccept: (chunkId: number, side: 'left' | 'right') => store.acceptSide(chunkId, side),
-    onIgnore: (chunkId: number) => store.apply(chunkId, 'ignore'),
+    onAccept: (chunkId: number, side: 'left' | 'right') => session?.store.acceptSide(chunkId, side),
+    onIgnore: (chunkId: number) => session?.store.apply(chunkId, 'ignore'),
     canAccept: (chunk: Chunk, side: 'left' | 'right') => canAccept(chunk, side),
     canIgnore: (chunk: Chunk) => canIgnore(chunk),
   };
 
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {
-    applyAllNonConflicting: () => store.applyMany((chunk) => nonConflictingAction(chunk)),
+    applyAllNonConflicting: () => session?.store.applyMany((chunk) => nonConflictingAction(chunk)),
     applyNonConflictingFrom: (side) =>
-      store.applyMany((chunk) => nonConflictingAction(chunk, side)),
-    magicResolve: () =>
-      store.applyMany((chunk) => (canMagicResolve(chunk) ? 'acceptLeft' : null)) &&
-      store.applyMany((chunk) =>
+      session?.store.applyMany((chunk) => nonConflictingAction(chunk, side)),
+    magicResolve: () => {
+      session?.store.applyMany((chunk) => (canMagicResolve(chunk) ? 'acceptLeft' : null));
+      session?.store.applyMany((chunk) =>
         chunk.bothInserted && chunk.state === 'appliedLeft' ? 'acceptRight' : null,
-      ),
+      );
+    },
     next: () => navigate(1),
     previous: () => navigate(-1),
+    setWhitespace: (mode) => void changeWhitespace(mode),
+    setHighlight: (mode) => {
+      if (session) {
+        session.highlight = mode;
+        refresh();
+      }
+    },
   });
-  buildFooter(layout.footer, { apply: requestApply, abort: () => post({ type: 'abort' }) });
+  buildFooter(layout.footer, {
+    acceptLeft: () => session?.store.acceptAll('left', session.payload.left),
+    acceptRight: () => session?.store.acceptAll('right', session.payload.right),
+    apply: requestApply,
+    cancel: () => post({ type: 'abort' }),
+  });
 
   session = {
+    payload,
+    layout,
     panes,
     store,
     chunks,
+    wordRanges: computeWordRanges(chunks, payload),
+    whitespace: 'exact',
+    highlight: 'words',
     connectors: {
       left: new Connectors(layout.leftStrip, 'left', panes, callbacks),
       right: new Connectors(layout.rightStrip, 'right', panes, callbacks),

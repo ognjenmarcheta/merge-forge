@@ -44,7 +44,10 @@ describe('listConflictStatuses', () => {
   test('classifies each conflict shape from the index stages', async () => {
     const statuses = await listConflictStatuses(fixture());
     const byPath = new Map(statuses.map((s) => [s.path, s]));
-    expect(byPath.get('modify-modify.txt')).toMatchObject({ yours: 'Modified', theirs: 'Modified' });
+    expect(byPath.get('modify-modify.txt')).toMatchObject({
+      yours: 'Modified',
+      theirs: 'Modified',
+    });
     expect(byPath.get('both-added.txt')).toMatchObject({ yours: 'Added', theirs: 'Added' });
     // The fixture's feature branch deleted the file main modified.
     expect(byPath.get('delete-modify.txt')).toMatchObject({ yours: 'Modified', theirs: 'Deleted' });

@@ -102,9 +102,7 @@ export async function getMergeBranches(repoRoot: string): Promise<MergeBranches>
       (await readGitFile(repoRoot, 'rebase-merge/head-name')) ??
       (await readGitFile(repoRoot, 'rebase-apply/head-name'));
     const onto = await readGitFile(repoRoot, 'rebase-merge/onto');
-    const ontoName = onto
-      ? await tryGit(repoRoot, ['name-rev', '--name-only', onto])
-      : undefined;
+    const ontoName = onto ? await tryGit(repoRoot, ['name-rev', '--name-only', onto]) : undefined;
     return {
       yours: headName ? refToBranchName(headName) : 'yours',
       theirs: ontoName ?? 'upstream',

@@ -1,7 +1,14 @@
 import type { Chunk, ChunkState, ChunkSubtype } from '../src/merge/chunk';
+import type { WordRange } from '../src/merge/wordDiff';
 import type { CenterRange } from './alignment';
 import type { monaco } from './monaco';
 import type { PaneName } from './panes';
+
+/** Word-level emphasis for one chunk, per side pane. */
+export interface ChunkWordRanges {
+  left: WordRange[];
+  right: WordRange[];
+}
 
 /** JetBrains colour scheme: blue modified, green added, gray deleted, red conflict. */
 function classesFor(kind: 'mod' | 'add' | 'del' | 'conf', state: ChunkState): string[] {
@@ -76,11 +83,36 @@ export function renderDecorations(
   chunks: readonly Chunk[],
   centerRanges: ReadonlyMap<number, CenterRange>,
   collections: Record<PaneName, monaco.editor.IEditorDecorationsCollection>,
+  wordRanges?: ReadonlyMap<number, ChunkWordRanges>,
 ): void {
   const byPane: Record<PaneName, monaco.editor.IModelDeltaDecoration[]> = {
     left: [],
     center: [],
     right: [],
+  };
+
+  const pushWords = (
+    pane: 'left' | 'right',
+    chunk: Chunk,
+    ranges: readonly WordRange[] | undefined,
+  ): void => {
+    // Emphasis only helps while the chunk is still a live question.
+    if (!ranges || chunk.state !== 'initial') {
+      return;
+    }
+    const startLine = pane === 'left' ? chunk.left.start : chunk.right.start;
+    const kind = chunk.kind === 'conflict' ? 'conf' : 'mod';
+    for (const range of ranges) {
+      byPane[pane].push({
+        range: {
+          startLineNumber: startLine + range.line + 1,
+          startColumn: range.startCol + 1,
+          endLineNumber: startLine + range.line + 1,
+          endColumn: range.endCol + 1,
+        },
+        options: { inlineClassName: `mf-word mf-word-${kind}` },
+      });
+    }
   };
 
   for (const chunk of chunks) {
@@ -98,6 +130,9 @@ export function renderDecorations(
         byPane.right.push(decoration);
       }
     }
+    const words = wordRanges?.get(chunk.id);
+    pushWords('left', chunk, words?.left);
+    pushWords('right', chunk, words?.right);
     // The center shows the chunk's overall kind, since it holds the merged result.
     const centerKind = chunk.kind === 'conflict' ? 'conf' : 'mod';
     const centerRange = centerRanges.get(chunk.id);

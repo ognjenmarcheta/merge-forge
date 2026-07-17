@@ -46,7 +46,17 @@ const workerOptions = {
   target: 'es2022',
 };
 
-const allOptions = [extensionOptions, webviewOptions, workerOptions];
+/** The Conflicts dialog — a deliberately tiny bundle with no Monaco in it. */
+const conflictsOptions = {
+  ...common,
+  entryPoints: { conflicts: 'webview-conflicts/main.ts' },
+  outdir: 'dist/webview',
+  platform: 'browser',
+  format: 'iife',
+  target: 'es2022',
+};
+
+const allOptions = [extensionOptions, webviewOptions, workerOptions, conflictsOptions];
 
 if (watch) {
   const contexts = await Promise.all(allOptions.map((options) => esbuild.context(options)));

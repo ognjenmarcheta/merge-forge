@@ -1,4 +1,8 @@
 import type { Chunk } from '../src/merge/chunk';
+import type { WhitespaceMode } from '../src/merge/engine';
+
+/** How changed regions are emphasized: word-level detail or line backgrounds only. */
+export type HighlightMode = 'words' | 'lines';
 
 export interface ToolbarActions {
   applyAllNonConflicting: () => void;
@@ -6,11 +10,15 @@ export interface ToolbarActions {
   magicResolve: () => void;
   next: () => void;
   previous: () => void;
+  setWhitespace: (mode: WhitespaceMode) => void;
+  setHighlight: (mode: HighlightMode) => void;
 }
 
 export interface FooterActions {
+  acceptLeft: () => void;
+  acceptRight: () => void;
   apply: () => void;
-  abort: () => void;
+  cancel: () => void;
 }
 
 function button(label: string, title: string, onClick: () => void, primary = false): HTMLElement {
@@ -24,38 +32,93 @@ function button(label: string, title: string, onClick: () => void, primary = fal
   return node;
 }
 
-export interface Toolbar {
-  /** Reflects progress and enables/disables what currently makes sense. */
-  update: (chunks: readonly Chunk[], magicAvailable: boolean) => void;
+function select<T extends string>(
+  title: string,
+  options: Array<[T, string]>,
+  onChange: (value: T) => void,
+): HTMLSelectElement {
+  const node = document.createElement('select');
+  node.title = title;
+  for (const [value, label] of options) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    node.append(option);
+  }
+  node.addEventListener('change', () => onChange(node.value as T));
+  return node;
 }
 
+function separator(): HTMLElement {
+  const node = document.createElement('span');
+  node.className = 'mf-sep';
+  return node;
+}
+
+export interface Toolbar {
+  update: (chunks: readonly Chunk[], magicAvailable: boolean) => void;
+  /** Reverts the whitespace dropdown, for when the user cancels the recompute. */
+  setWhitespaceValue: (mode: WhitespaceMode) => void;
+}
+
+/** The JetBrains-style toolbar: nav, bulk-apply group, dropdowns, counter on the right. */
 export function buildToolbar(
   host: HTMLElement,
   counter: HTMLElement,
   actions: ToolbarActions,
 ): Toolbar {
-  const applyAll = button(
-    '⤢ Apply All Non-Conflicting',
-    'Resolve every change only one side made',
-    actions.applyAllNonConflicting,
-  );
-  const fromLeft = button('⇥ From Left', 'Apply non-conflicting changes from the left only', () =>
-    actions.applyNonConflictingFrom('left'),
-  );
-  const fromRight = button(
-    '⇤ From Right',
-    'Apply non-conflicting changes from the right only',
-    () => actions.applyNonConflictingFrom('right'),
-  );
-  const magic = button(
-    '✦ Magic Resolve',
-    'Keep both sides where each simply added lines',
-    actions.magicResolve,
-  );
   const previous = button('↑', 'Previous change (Shift+F7)', actions.previous);
   const next = button('↓', 'Next change (F7)', actions.next);
 
-  host.append(applyAll, fromLeft, fromRight, magic, previous, next, counter);
+  const applyLabel = document.createElement('span');
+  applyLabel.className = 'mf-toolbar-label';
+  applyLabel.textContent = 'Apply non-conflicting changes:';
+  const fromLeft = button('⇥', 'Apply non-conflicting changes from the left side', () =>
+    actions.applyNonConflictingFrom('left'),
+  );
+  const fromRight = button('⇤', 'Apply non-conflicting changes from the right side', () =>
+    actions.applyNonConflictingFrom('right'),
+  );
+  const applyAll = button('⤢', 'Apply all non-conflicting changes', actions.applyAllNonConflicting);
+  const magic = button(
+    '✦',
+    'Magic Resolve — keep both sides where each simply added lines',
+    actions.magicResolve,
+  );
+
+  const whitespace = select<WhitespaceMode>(
+    'How whitespace differences are treated when comparing',
+    [
+      ['exact', 'Do not ignore'],
+      ['trim', 'Trim whitespaces'],
+      ['ignoreAll', 'Ignore whitespaces'],
+      ['ignoreAllAndEmpty', 'Ignore whitespaces and empty lines'],
+    ],
+    actions.setWhitespace,
+  );
+  const highlight = select<HighlightMode>(
+    'How differences are highlighted',
+    [
+      ['words', 'Highlight words'],
+      ['lines', 'Highlight lines'],
+    ],
+    actions.setHighlight,
+  );
+
+  host.append(
+    previous,
+    next,
+    separator(),
+    applyLabel,
+    fromLeft,
+    fromRight,
+    applyAll,
+    magic,
+    separator(),
+    whitespace,
+    highlight,
+    counter,
+  );
 
   return {
     update(chunks, magicAvailable) {
@@ -76,19 +139,37 @@ export function buildToolbar(
       } else if (pending.length === 0) {
         counter.textContent = '✓ All changes processed';
       } else {
-        const parts = [`${pending.length} of ${chunks.length} remaining`];
+        // JetBrains phrasing: "6 changes. 1 conflict."
+        const parts = [`${pending.length} change${pending.length === 1 ? '' : 's'}.`];
         if (conflicts > 0) {
-          parts.push(`${conflicts} conflict${conflicts === 1 ? '' : 's'}`);
+          parts.push(`${conflicts} conflict${conflicts === 1 ? '' : 's'}.`);
         }
-        counter.textContent = parts.join(' · ');
+        counter.textContent = parts.join(' ');
       }
+    },
+    setWhitespaceValue(mode) {
+      whitespace.value = mode;
     },
   };
 }
 
+/** Footer per the screenshots: whole-file accepts on the left, Cancel/Apply on the right. */
 export function buildFooter(host: HTMLElement, actions: FooterActions): void {
+  const spacer = document.createElement('span');
+  spacer.className = 'mf-spacer';
   host.append(
-    button('Abort', 'Close without changing the conflicted file', actions.abort),
+    button(
+      'Accept Left',
+      "Resolve the whole file with the left side's version",
+      actions.acceptLeft,
+    ),
+    button(
+      'Accept Right',
+      "Resolve the whole file with the right side's version",
+      actions.acceptRight,
+    ),
+    spacer,
+    button('Cancel', 'Close without changing the conflicted file', actions.cancel),
     button('Apply', 'Save the result and mark the file resolved', actions.apply, true),
   );
 }

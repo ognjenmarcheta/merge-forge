@@ -48,3 +48,32 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
 </body>
 </html>`;
 }
+
+/** Shell for the Conflicts dialog — no Monaco, so a much tighter CSP than the editor's. */
+export function getConflictsHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  const webviewDist = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDist, 'conflicts.js'));
+  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewDist, 'conflicts.css'));
+  const nonce = getNonce();
+  const csp = [
+    `default-src 'none'`,
+    `script-src 'nonce-${nonce}'`,
+    `style-src ${webview.cspSource}`,
+    `img-src ${webview.cspSource} data:`,
+  ].join('; ');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="${csp}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="${styleUri}" rel="stylesheet">
+  <title>Conflicts</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+}

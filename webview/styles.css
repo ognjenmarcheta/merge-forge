@@ -227,3 +227,47 @@ button:disabled {
   align-items: center;
   cursor: pointer;
 }
+
+/* --- JetBrains-style toolbar additions ------------------------------------- */
+
+.mf-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+}
+
+.mf-toolbar-label {
+  opacity: 0.8;
+  font-size: 0.9em;
+}
+
+.mf-toolbar select {
+  padding: 2px 4px;
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-dropdown-background, #3c3c3c);
+  color: var(--vscode-dropdown-foreground, #f0f0f0);
+  font-family: inherit;
+  font-size: 0.95em;
+}
+
+.mf-spacer {
+  flex: 1;
+}
+
+/* --- word-level diff emphasis ---------------------------------------------- */
+
+.mf-word-mod {
+  border-radius: 2px;
+  background: rgba(58, 121, 189, 0.5);
+}
+
+.mf-word-conf {
+  border-radius: 2px;
+  background: rgba(199, 84, 80, 0.55);
+}
+
+.mf-banner button {
+  margin-left: 6px;
+}

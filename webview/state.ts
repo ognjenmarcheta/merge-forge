@@ -34,6 +34,7 @@ export class ChunkStore {
   private readonly history = new Map<number, Snapshot>();
   private static readonly HISTORY_LIMIT = 1000;
   private applying = false;
+  private contentListener: monaco.IDisposable | undefined;
 
   constructor(
     readonly chunks: Chunk[],
@@ -50,6 +51,14 @@ export class ChunkStore {
     // Seed the initial version, so undoing everything restores the untouched state.
     this.snapshot();
     this.watchUserEdits();
+  }
+
+  /** Detaches from the editor so a new store can take over (whitespace-mode rebuild). */
+  dispose(): void {
+    this.contentListener?.dispose();
+    this.model.deltaDecorations([...this.trackers.values()], []);
+    this.trackers.clear();
+    this.history.clear();
   }
 
   private snapshot(): void {
@@ -146,7 +155,7 @@ export class ChunkStore {
    * Content can't drift like that: an edit outside a chunk moves it without changing it.
    */
   private watchUserEdits(): void {
-    this.model.onDidChangeContent(() => {
+    this.contentListener = this.model.onDidChangeContent(() => {
       if (this.applying) {
         return;
       }
@@ -247,6 +256,40 @@ export class ChunkStore {
 
   acceptSide(chunkId: number, side: Side): boolean {
     return this.apply(chunkId, side === 'left' ? 'acceptLeft' : 'acceptRight');
+  }
+
+  /**
+   * Resolves the whole file to one side in a single step — JetBrains' Accept Left/Right.
+   *
+   * Chunks the chosen side never touched become 'ignored' (their other-side change was
+   * deliberately not taken); everything else is applied. One undo step reverses it all.
+   */
+  acceptAll(side: Side, fullSideText: string): void {
+    this.applying = true;
+    try {
+      this.editor.pushUndoStop();
+      this.editor.executeEdits(EDIT_SOURCE, [
+        { range: this.model.getFullModelRange(), text: fullSideText },
+      ]);
+      this.editor.pushUndoStop();
+      for (const chunk of this.chunks) {
+        const untouched =
+          side === 'left' ? chunk.kind === 'changedRight' : chunk.kind === 'changedLeft';
+        chunk.state = untouched
+          ? 'ignored'
+          : chunk.kind === 'bothIdentical'
+            ? 'appliedBoth'
+            : side === 'left'
+              ? 'appliedLeft'
+              : 'appliedRight';
+        const range = side === 'left' ? chunk.left : chunk.right;
+        this.repin(chunk, range.start, range.end - range.start);
+      }
+    } finally {
+      this.applying = false;
+    }
+    this.snapshot();
+    this.onChange();
   }
 
   result(): string {

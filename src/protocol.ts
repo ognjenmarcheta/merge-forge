@@ -51,3 +51,27 @@ export type WebviewToHostMessage =
   | { type: 'apply'; payload: { content: string; eol: Eol } }
   | { type: 'abort' }
   | { type: 'log'; level: 'warn' | 'error'; message: string };
+
+// --- Conflicts dialog (the file-list webview, separate bundle) ---------------------
+
+export interface ConflictFileEntry {
+  path: string;
+  yours: string;
+  theirs: string;
+  /** False for delete/modify rows: no three-pane view exists, Accept buttons resolve. */
+  mergeable: boolean;
+}
+
+export interface ConflictsData {
+  files: ConflictFileEntry[];
+  branches: { yours: string; theirs: string };
+  operation: 'merge' | 'rebase' | 'cherry-pick' | 'unknown';
+}
+
+export type HostToConflictsMessage = { type: 'conflicts'; payload: ConflictsData };
+
+export type ConflictsToHostMessage =
+  | { type: 'ready' }
+  | { type: 'acceptSide'; payload: { paths: string[]; side: 'yours' | 'theirs' } }
+  | { type: 'openMerge'; payload: { path: string } }
+  | { type: 'close' };
