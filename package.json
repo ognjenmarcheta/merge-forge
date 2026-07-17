@@ -73,11 +73,11 @@
       },
       {
         "command": "mergeForge.setApiKey",
-        "title": "Merge Forge: Set Anthropic API Key"
+        "title": "Merge Forge: Set AI Provider & API Key"
       },
       {
         "command": "mergeForge.clearApiKey",
-        "title": "Merge Forge: Clear Anthropic API Key"
+        "title": "Merge Forge: Clear AI API Keys"
       }
     ],
     "menus": {
@@ -161,10 +161,39 @@
           "default": false,
           "description": "Apply all non-conflicting changes automatically when the merge editor opens."
         },
+        "mergeForge.ai.provider": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai",
+            "deepseek",
+            "kimi",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Anthropic (Claude) — default model claude-opus-4-8",
+            "OpenAI — default model gpt-5.6-sol",
+            "DeepSeek — default model deepseek-v4-flash",
+            "Kimi / Moonshot — default model kimi-k2.6",
+            "Any OpenAI-compatible endpoint (OpenRouter, Ollama, proxies) — set mergeForge.ai.customBaseUrl and customModel"
+          ],
+          "default": "anthropic",
+          "description": "AI provider used by \"Explain conflicts with AI\" when the editor offers no models of its own. Set up with the \"Merge Forge: Set AI Provider & API Key\" command."
+        },
         "mergeForge.ai.model": {
           "type": "string",
-          "default": "claude-opus-4-8",
-          "description": "Claude model used by \"Explain conflicts with AI\" when calling the Anthropic API directly (the VS Code Language Model API path uses your Copilot model instead)."
+          "default": "auto",
+          "description": "Model for AI explanations. \"auto\" uses the active provider's default (see mergeForge.ai.provider); any other value overrides it. The VS Code Language Model API path uses your Copilot model instead."
+        },
+        "mergeForge.ai.customBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of the Custom OpenAI-compatible endpoint, e.g. http://localhost:11434/v1 for Ollama or https://openrouter.ai/api/v1. Only used when mergeForge.ai.provider is \"custom\"."
+        },
+        "mergeForge.ai.customModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model ID for the Custom endpoint (mergeForge.ai.model \"auto\" resolves to this when the provider is \"custom\")."
         }
       }
     }
