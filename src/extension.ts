@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext): void {
     conflictedPaths = new Set(absolutePaths);
     knownRepoRoot = repoRoot;
     codeLens.refresh();
-    void cluster.refresh(repoRoot);
+    void cluster.refresh(repoRoot, conflictedPaths.size);
     ConflictsPanel.refresh();
     // JetBrains pops its Conflicts dialog the moment a merge hits conflicts.
     if (!hadConflicts && conflictedPaths.size > 0 && repoRoot && readAutoShow()) {

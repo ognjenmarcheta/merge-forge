@@ -40,7 +40,7 @@ export class MergeStatusCluster {
   }
 
   /** Re-reads the operation state and shows or hides the cluster accordingly. */
-  async refresh(repoRoot: string | undefined): Promise<void> {
+  async refresh(repoRoot: string | undefined, conflictCount = 0): Promise<void> {
     const operation = repoRoot ? await detectOperation(repoRoot) : undefined;
     if (!repoRoot || !operation || operation.kind === 'unknown') {
       this.hide();
@@ -53,8 +53,16 @@ export class MergeStatusCluster {
         : operation.kind === 'rebase'
           ? 'Rebasing'
           : 'Cherry-picking';
-    this.pill.text = `$(warning) ${verb} ${branches.theirs} → ${branches.yours}`;
-    this.pill.tooltip = `${verb} branch "${branches.theirs}" into "${branches.yours}" — click to show conflicts`;
+    // The live count is the pill's headline; the branch pair moves to the tooltip.
+    this.pill.text =
+      conflictCount > 0
+        ? `$(warning) ${verb}: ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}`
+        : `$(warning) ${verb}: all resolved`;
+    this.pill.tooltip =
+      `${verb} branch "${branches.theirs}" into "${branches.yours}" — ` +
+      (conflictCount > 0
+        ? 'click to show conflicts'
+        : 'every file is resolved; commit (or continue) to finish');
     this.pill.show();
     this.resolve.show();
     this.abort.show();
