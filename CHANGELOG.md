@@ -99,3 +99,13 @@ Multi-provider AI backends:
 - The prompt now demands exactly one section per conflict, and the request carries an
   explicit 16K output-token cap; when a response still hits the cap, the drawer shows
   "⚠ Output limit reached" instead of pretending the explanation was complete.
+
+## 0.5.0 — unreleased
+
+- **✦ Resolve with AI**: a button in the explanation drawer asks the AI to write the
+  merged code for every unresolved conflict and places it straight into the result
+  pane — as reviewable, individually undoable edits (Cmd+Z), never touching git until
+  you click Apply. If an explanation was generated first, the resolution follows its
+  suggestions. Partial answers apply what parsed and report the rest: "Resolved 3 of
+  4 — 1 conflict left for you." Works with all providers, including the editor's own
+  models and local Ollama.
