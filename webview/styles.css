@@ -729,3 +729,30 @@ body.mf-light .mf-explain-body li code {
   color: var(--vscode-inputValidation-warningBorder, #cca700);
   font-size: 0.9em;
 }
+
+.mf-explain-resolve {
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 2px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 3px;
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  font-size: 0.92em;
+  cursor: pointer;
+}
+
+.mf-explain-resolve:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.mf-explain-resolve:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mf-explain-report {
+  margin-top: 8px;
+  color: var(--vscode-testing-iconPassed, #4ec94e);
+  font-size: 0.92em;
+}

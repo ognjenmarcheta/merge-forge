@@ -1,6 +1,6 @@
 import type { Chunk, ChunkAction, Side } from '../src/merge/chunk';
 import { transition } from '../src/merge/chunk';
-import { joinLines } from '../src/merge/engine';
+import { joinLines, splitLines } from '../src/merge/engine';
 import { chunkTexts, resolveAction, textForState, type ChunkTexts } from '../src/merge/resolve';
 import type { CenterRange } from './alignment';
 import type { monaco } from './monaco';
@@ -229,6 +229,36 @@ export class ChunkStore {
       // reacts to edits at its edges, which is not a question with a right answer for a
       // whole-range replacement — so don't ask it.
       this.repin(chunk, range.start, resolution.lines.length);
+    } finally {
+      this.applying = false;
+    }
+    this.snapshot();
+    this.onChange();
+    return true;
+  }
+
+  /**
+   * Writes arbitrary replacement text into a chunk's region — the AI resolution path.
+   *
+   * The chunk lands in 'manuallyEdited', exactly as if the user had typed the merge by
+   * hand: counted as decided, undoable as its own Cmd+Z step, and nothing reaches git
+   * until Apply. Only untouched chunks accept a resolution; anything the user already
+   * decided is never overwritten.
+   */
+  replaceText(chunkId: number, text: string): boolean {
+    const chunk = this.chunks.find((c) => c.id === chunkId);
+    if (!chunk || chunk.state !== 'initial') {
+      return false;
+    }
+    const range = this.centerRange(chunkId);
+    const model = this.model;
+    this.applying = true;
+    try {
+      this.editor.pushUndoStop();
+      this.editor.executeEdits(EDIT_SOURCE, [{ range: toMonacoRange(model, range), text }]);
+      this.editor.pushUndoStop();
+      chunk.state = 'manuallyEdited';
+      this.repin(chunk, range.start, text === '' ? 0 : splitLines(text).length);
     } finally {
       this.applying = false;
     }

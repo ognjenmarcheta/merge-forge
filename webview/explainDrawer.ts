@@ -10,6 +10,12 @@ export interface ExplainDrawer {
   appendDelta(text: string): void;
   finish(truncated?: boolean): void;
   showError(message: string, unconfigured: boolean): void;
+  /** Marks the resolve request in flight: disables the button, shows progress. */
+  setResolving(active: boolean): void;
+  /** Renders the outcome line after resolutions were applied. */
+  showResolveReport(applied: number, requested: number, remaining: number): void;
+  /** The raw explanation text accumulated so far — context for the resolve request. */
+  explanationText(): string;
   readonly isOpen: boolean;
 }
 
@@ -18,6 +24,8 @@ export interface ExplainDrawerCallbacks {
   onCancel(): void;
   /** Fired from the "Set Anthropic API key" button in the unconfigured panel. */
   onSetup(): void;
+  /** Fired from the "Resolve with AI" header button. */
+  onResolve(): void;
 }
 
 function escapeHtml(text: string): string {
@@ -82,6 +90,11 @@ export function createExplainDrawer(
   const title = document.createElement('span');
   title.className = 'mf-explain-title';
   title.textContent = '✦ AI explanation';
+  const resolve = document.createElement('button');
+  resolve.className = 'mf-explain-resolve';
+  resolve.textContent = '✦ Resolve with AI';
+  resolve.title = 'Let the AI write a merged version of every unresolved conflict into the result';
+  resolve.addEventListener('click', () => callbacks.onResolve());
   const close = document.createElement('button');
   close.className = 'mf-explain-close';
   close.title = 'Close';
@@ -89,7 +102,7 @@ export function createExplainDrawer(
   const closeGlyph = document.createElement('span');
   closeGlyph.className = 'codicon codicon-close';
   close.append(closeGlyph);
-  header.append(title, close);
+  header.append(title, resolve, close);
 
   const body = document.createElement('div');
   body.className = 'mf-explain-body';
@@ -98,8 +111,13 @@ export function createExplainDrawer(
   host.replaceChildren(header, body);
 
   let streaming = false;
+  let resolving = false;
   let accumulated = '';
   let stickToBottom = true;
+
+  const syncResolveButton = (): void => {
+    resolve.toggleAttribute('disabled', streaming || resolving);
+  };
 
   body.addEventListener('scroll', () => {
     stickToBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
@@ -115,9 +133,11 @@ export function createExplainDrawer(
   };
 
   close.addEventListener('click', () => {
-    if (streaming) {
+    if (streaming || resolving) {
       callbacks.onCancel();
       streaming = false;
+      resolving = false;
+      syncResolveButton();
     }
     host.classList.add('mf-hidden');
   });
@@ -130,6 +150,7 @@ export function createExplainDrawer(
       streaming = true;
       accumulated = '';
       stickToBottom = true;
+      syncResolveButton();
       // The scope in the header: one section per unresolved conflict is coming, no more —
       // so a single section on a single-conflict file doesn't read as an early stop.
       title.textContent = `✦ AI explanation — ${conflictCount} unresolved conflict${
@@ -148,11 +169,37 @@ export function createExplainDrawer(
     },
     finish(truncated) {
       streaming = false;
+      syncResolveButton();
       render(
         truncated
           ? '<p class="mf-explain-truncated">⚠ Output limit reached — the explanation may be incomplete.</p>'
           : '',
       );
+    },
+    setResolving(active) {
+      resolving = active;
+      syncResolveButton();
+      if (active) {
+        host.classList.remove('mf-hidden');
+        render(
+          '<p class="mf-explain-waiting">Resolving conflicts<span class="mf-explain-cursor"></span></p>',
+        );
+      }
+    },
+    showResolveReport(applied, requested, remaining) {
+      resolving = false;
+      syncResolveButton();
+      const left =
+        remaining > 0
+          ? ` ${remaining} conflict${remaining === 1 ? '' : 's'} left for you.`
+          : ' All conflicts are resolved.';
+      render(
+        `<p class="mf-explain-report">✦ Resolved ${applied} of ${requested} — ` +
+          `review the result; Cmd+Z reverts.${left}</p>`,
+      );
+    },
+    explanationText() {
+      return accumulated;
     },
     showError(message, unconfigured) {
       streaming = false;

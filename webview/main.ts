@@ -286,17 +286,17 @@ function requestApply(): void {
   post({ type: 'apply', payload: { content: session.store.result(), eol: session.zone } });
 }
 
-/** Ships the unresolved conflicts (base + both sides) to the host for an AI explanation. */
-function requestExplain(): void {
-  if (!session || !drawer) {
-    return;
+/** The unresolved conflicts (base + both sides) as an AI request, or undefined when none. */
+function buildAiRequest(): ExplainRequest | undefined {
+  if (!session) {
+    return undefined;
   }
   const { payload } = session;
   const conflicts = session.chunks.filter((c) => c.kind === 'conflict' && c.state === 'initial');
   if (conflicts.length === 0) {
-    return;
+    return undefined;
   }
-  const request: ExplainRequest = {
+  return {
     filePath: payload.filePath,
     languageId: payload.languageId,
     labels: payload.labels,
@@ -312,8 +312,57 @@ function requestExplain(): void {
       };
     }),
   };
-  drawer.openLoading(conflicts.length);
+}
+
+function requestExplain(): void {
+  const request = buildAiRequest();
+  if (!request || !drawer) {
+    return;
+  }
+  drawer.openLoading(request.conflicts.length);
   post({ type: 'explain', payload: request });
+}
+
+/** "Resolve with AI": ask for merged code and let `applyAiResolutions` place it. */
+function requestAiResolve(): void {
+  const request = buildAiRequest();
+  if (!request || !drawer) {
+    return;
+  }
+  const explanation = drawer.explanationText();
+  drawer.setResolving(true);
+  post({
+    type: 'aiResolve',
+    payload: { request, ...(explanation.trim() !== '' ? { explanation } : {}) },
+  });
+}
+
+/**
+ * Places the AI's merged blocks into the result. Bottom-up by current position, so an
+ * earlier replacement never shifts a later chunk's range mid-flight; chunks the user
+ * decided while the request ran are left alone.
+ */
+function applyAiResolutions(
+  resolutions: ReadonlyArray<{ chunkId: number; text: string }>,
+  missing: number,
+): void {
+  if (!session || !drawer) {
+    return;
+  }
+  const { store } = session;
+  const ordered = [...resolutions].sort(
+    (a, b) => store.centerRange(b.chunkId).start - store.centerRange(a.chunkId).start,
+  );
+  let applied = 0;
+  for (const resolution of ordered) {
+    if (store.replaceText(resolution.chunkId, resolution.text)) {
+      applied++;
+    }
+  }
+  const remaining = session.chunks.filter(
+    (c) => c.kind === 'conflict' && c.state === 'initial',
+  ).length;
+  drawer.showResolveReport(applied, resolutions.length + missing, remaining);
 }
 
 /**
@@ -431,6 +480,7 @@ function start(payload: InitPayload): void {
   drawer = createExplainDrawer(layout.explainHost, {
     onCancel: () => post({ type: 'explainCancel' }),
     onSetup: () => post({ type: 'openAiSetup' }),
+    onResolve: requestAiResolve,
   });
 
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {
@@ -535,7 +585,10 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
   } else if (message.type === 'explainDone') {
     drawer?.finish(message.truncated === true);
   } else if (message.type === 'explainError') {
+    drawer?.setResolving(false);
     drawer?.showError(message.message, message.unconfigured === true);
+  } else if (message.type === 'aiResolutions') {
+    applyAiResolutions(message.resolutions, message.missing);
   }
 });
 
