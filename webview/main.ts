@@ -187,6 +187,25 @@ function navigate(direction: 1 | -1): void {
   refresh();
 }
 
+/** Advances to the next pending chunk, or stays put when nothing is left to decide. */
+function navigateToNextUnresolved(): void {
+  if (session?.chunks.some((chunk) => chunk.state === 'initial')) {
+    navigate(1);
+  }
+}
+
+/**
+ * Runs a resolution action and, when it settles the chunk, hops to the next pending one
+ * — accept, accept, accept down the file without reaching for the mouse.
+ */
+function resolveAndAdvance(run: () => void, chunkId: number): void {
+  run();
+  const chunk = session?.chunks.find((c) => c.id === chunkId);
+  if (chunk && chunk.state !== 'initial') {
+    navigateToNextUnresolved();
+  }
+}
+
 /**
  * Applies every change only one side made. Strictly non-conflicting: a conflict —
  * including two sides inserting different versions of the same new code — never has an
@@ -386,6 +405,8 @@ function start(payload: InitPayload): void {
     store.applyMany((chunk) => nonConflictingAction(chunk));
   }
   refresh();
+  // Land on the first pending change immediately — flash and outline included.
+  navigateToNextUnresolved();
 
   // Debug handle for the dev harness (dev/harness*.html); inert inside a real webview.
   (window as unknown as Record<string, unknown>).__mfSession = session;
@@ -425,14 +446,35 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
   }
 });
 
-// Webviews swallow most keystrokes, so F7 is handled here as well as via a contributed
-// keybinding — whichever gets there first.
-window.addEventListener('keydown', (event) => {
-  if (event.key === 'F7') {
-    event.preventDefault();
-    navigate(event.shiftKey ? -1 : 1);
-  }
-});
+// Webviews swallow most keystrokes, so navigation and resolution keys are handled here
+// (capture phase, so Monaco doesn't eat them first). F7 also exists as a contributed
+// keybinding — whichever gets there first wins.
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key === 'F7') {
+      event.preventDefault();
+      navigate(event.shiftKey ? -1 : 1);
+      return;
+    }
+    // Alt+←/→ take the corresponding side of the CURRENT chunk, then auto-advance.
+    if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      const id = session?.currentChunkId;
+      const chunk = session?.chunks.find((c) => c.id === id);
+      if (id === undefined || !chunk) {
+        return;
+      }
+      const side = event.key === 'ArrowLeft' ? 'left' : 'right';
+      const offered = sideControls(chunk);
+      if (side === 'left' ? offered.acceptLeft : offered.acceptRight) {
+        event.preventDefault();
+        event.stopPropagation();
+        resolveAndAdvance(() => session?.store.acceptSide(id, side), id);
+      }
+    }
+  },
+  { capture: true },
+);
 
 // The worker must exist before any editor is created, so `ready` — which triggers `init`,
 // which builds the panes — waits for it.
