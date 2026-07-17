@@ -50,6 +50,23 @@ describe('buildExplainPrompt', () => {
     const { system } = buildExplainPrompt(request());
     expect(system.toLowerCase()).toContain('resolution');
     expect(system).toContain('### Conflict');
+    // The every-conflict contract lives in the system prompt…
+    expect(system).toContain('every conflict');
+  });
+
+  test('user prompt closes with the exact expected section count', () => {
+    const { user } = buildExplainPrompt(
+      request({
+        conflicts: [
+          { index: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
+          { index: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
+          { index: 3, baseText: 'three\n', leftText: 'tres\n', rightText: 'drei\n' },
+        ],
+      }),
+    );
+    // …and the per-request count contract in the user prompt, so a model can't
+    // quietly stop after the first section.
+    expect(user).toContain('exactly 3 "### Conflict" sections');
   });
 
   test('long sides are truncated at the cap with a marker', () => {

@@ -16,7 +16,8 @@ export function secretKeyFor(providerId: string): string {
 
 export interface ExplainCallbacks {
   onDelta(text: string): void;
-  onDone(): void;
+  /** `truncated` is set when the model hit the output-token cap mid-answer. */
+  onDone(truncated?: boolean): void;
   onError(message: string): void;
 }
 
@@ -179,6 +180,8 @@ export async function explainViaAiSdk(
       model,
       system,
       prompt: user,
+      // Generous cap: enough for many conflicts, but explicit so a hit is detectable.
+      maxOutputTokens: 16000,
       abortSignal: controller.signal,
       // The AI SDK reports stream errors here rather than throwing from textStream.
       onError: ({ error }) => fail(error),
@@ -190,7 +193,8 @@ export async function explainViaAiSdk(
       callbacks.onDelta(delta);
     }
     if (!failed && !token.isCancellationRequested) {
-      callbacks.onDone();
+      const finishReason = await result.finishReason;
+      callbacks.onDone(finishReason === 'length');
     }
   } catch (error) {
     fail(error);

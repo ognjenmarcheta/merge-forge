@@ -2,7 +2,7 @@
   "name": "merge-forge",
   "displayName": "MergeForge — JetBrains-style Conflict Resolver",
   "description": "Resolve Git merge conflicts in a JetBrains/WebStorm-style three-pane visual merge editor.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "ognjenmarcheta",
   "license": "MIT",
   "private": true,

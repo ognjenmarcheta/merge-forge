@@ -13,7 +13,8 @@ For every conflict, under a "### Conflict N" heading:
    or describe precisely which side to take and what to carry over from the other.
 
 Be concise and practical. If the two sides are compatible (e.g. both added independent code),
-say so and show how to combine them. Use markdown. Do not restate the inputs at length.`;
+say so and show how to combine them. Use markdown. Do not restate the inputs at length.
+Cover every conflict you are given — never stop after the first one.`;
 
 function fence(text: string): string {
   if (text === '') {
@@ -53,5 +54,10 @@ export function buildExplainPrompt(request: ExplainRequest): { system: string; u
       '',
     );
   }
+  // The explicit count keeps a model from quietly stopping after the first section.
+  lines.push(
+    `Your answer must contain exactly ${request.conflicts.length} "### Conflict" sections — ` +
+      'one per conflict above, in order.',
+  );
   return { system: SYSTEM_PROMPT, user: lines.join('\n') };
 }

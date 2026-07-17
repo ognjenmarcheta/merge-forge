@@ -174,7 +174,8 @@ export class MergePanel {
       request,
       {
         onDelta: (text) => this.post({ type: 'explainDelta', text }),
-        onDone: () => this.post({ type: 'explainDone' }),
+        onDone: (truncated) =>
+          this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
         onError: (message) => this.post({ type: 'explainError', message }),
       },
       cancellation.token,

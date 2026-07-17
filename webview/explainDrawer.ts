@@ -6,9 +6,9 @@
  */
 
 export interface ExplainDrawer {
-  openLoading(): void;
+  openLoading(conflictCount: number): void;
   appendDelta(text: string): void;
-  finish(): void;
+  finish(truncated?: boolean): void;
   showError(message: string, unconfigured: boolean): void;
   readonly isOpen: boolean;
 }
@@ -105,10 +105,10 @@ export function createExplainDrawer(
     stickToBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
   });
 
-  const render = (): void => {
+  const render = (extraHtml = ''): void => {
     body.innerHTML = `${renderMarkdown(accumulated)}${
       streaming ? '<span class="mf-explain-cursor"></span>' : ''
-    }`;
+    }${extraHtml}`;
     if (stickToBottom) {
       body.scrollTop = body.scrollHeight;
     }
@@ -126,10 +126,15 @@ export function createExplainDrawer(
     get isOpen() {
       return !host.classList.contains('mf-hidden');
     },
-    openLoading() {
+    openLoading(conflictCount) {
       streaming = true;
       accumulated = '';
       stickToBottom = true;
+      // The scope in the header: one section per unresolved conflict is coming, no more —
+      // so a single section on a single-conflict file doesn't read as an early stop.
+      title.textContent = `✦ AI explanation — ${conflictCount} unresolved conflict${
+        conflictCount === 1 ? '' : 's'
+      }`;
       host.classList.remove('mf-hidden');
       body.innerHTML =
         '<p class="mf-explain-waiting">Thinking<span class="mf-explain-cursor"></span></p>';
@@ -141,9 +146,13 @@ export function createExplainDrawer(
       accumulated += text;
       render();
     },
-    finish() {
+    finish(truncated) {
       streaming = false;
-      render();
+      render(
+        truncated
+          ? '<p class="mf-explain-truncated">⚠ Output limit reached — the explanation may be incomplete.</p>'
+          : '',
+      );
     },
     showError(message, unconfigured) {
       streaming = false;

@@ -723,3 +723,9 @@ body.mf-light .mf-explain-body p code,
 body.mf-light .mf-explain-body li code {
   background: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.07));
 }
+
+.mf-explain-truncated {
+  margin-top: 8px;
+  color: var(--vscode-inputValidation-warningBorder, #cca700);
+  font-size: 0.9em;
+}

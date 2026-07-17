@@ -39,6 +39,7 @@ beforeAll(async () => {
         res.end(JSON.stringify({ error: { message: 'bad key' } }));
         return;
       }
+      const wantsTruncation = body.includes('"model":"truncating-model"');
       res.writeHead(200, {
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache',
@@ -49,7 +50,14 @@ beforeAll(async () => {
         created: 1,
         model: 'stub',
       };
-      for (const chunk of SSE_CHUNKS) {
+      const chunks = wantsTruncation
+        ? SSE_CHUNKS.map((chunk) =>
+            chunk.choices[0]?.finish_reason === 'stop'
+              ? { choices: [{ index: 0, delta: {}, finish_reason: 'length' }] }
+              : chunk,
+          )
+        : SSE_CHUNKS;
+      for (const chunk of chunks) {
         res.write(`data: ${JSON.stringify({ ...common, ...chunk })}\n\n`);
       }
       res.write('data: [DONE]\n\n');
@@ -83,7 +91,7 @@ function collect() {
   const events: string[] = [];
   const callbacks: ExplainCallbacks = {
     onDelta: (text) => deltas.push(text),
-    onDone: () => events.push('done'),
+    onDone: (truncated) => events.push(truncated ? 'done:truncated' : 'done'),
     onError: (message) => events.push(`error:${message}`),
   };
   return { deltas, events, callbacks };
@@ -110,5 +118,18 @@ describe('explainViaAiSdk against a local OpenAI-compatible stub', () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toContain('Invalid Stub API key');
     expect(events[0]).toContain('Set AI Provider & API Key');
+  });
+
+  test("a 'length' finish is surfaced as a truncated completion", async () => {
+    const { deltas, events, callbacks } = collect();
+    await explainViaAiSdk(model('truncating-model'), 'Stub', request, callbacks, token());
+    expect(deltas.join('')).toBe('Hello world');
+    expect(events).toEqual(['done:truncated']);
+  });
+
+  test('the request carries an explicit output-token cap', async () => {
+    const { callbacks } = collect();
+    await explainViaAiSdk(model('ok-model'), 'Stub', request, callbacks, token());
+    expect(lastRequestBody).toContain('"max_tokens":16000');
   });
 });

@@ -53,7 +53,7 @@ export type HostToWebviewMessage =
   | { type: 'runAction'; action: MergeAction }
   | { type: 'applyResult'; ok: boolean; error?: string }
   | { type: 'explainDelta'; text: string }
-  | { type: 'explainDone' }
+  | { type: 'explainDone'; truncated?: boolean }
   | { type: 'explainError'; message: string; unconfigured?: boolean };
 
 export interface StatePayload {

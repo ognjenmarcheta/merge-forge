@@ -311,7 +311,7 @@ function requestExplain(): void {
       };
     }),
   };
-  drawer.openLoading();
+  drawer.openLoading(conflicts.length);
   post({ type: 'explain', payload: request });
 }
 
@@ -532,7 +532,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
   } else if (message.type === 'explainDelta') {
     drawer?.appendDelta(message.text);
   } else if (message.type === 'explainDone') {
-    drawer?.finish();
+    drawer?.finish(message.truncated === true);
   } else if (message.type === 'explainError') {
     drawer?.showError(message.message, message.unconfigured === true);
   }

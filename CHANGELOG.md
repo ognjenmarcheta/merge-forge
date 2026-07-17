@@ -90,3 +90,12 @@ Multi-provider AI backends:
 - Streaming now runs on the Vercel AI SDK — one code path for every provider, with
   the OpenAI-compatible protocol covered by a local stub test. Note: DeepSeek's old
   `deepseek-chat` alias retires 2026-07-24; merge-forge uses the V4 IDs already.
+
+## 0.4.1 — unreleased
+
+- The explain drawer header now shows its scope — "✦ AI explanation — N unresolved
+  conflicts" — so a single section on a single-conflict file no longer reads as an
+  early stop (already-resolved conflicts are intentionally not re-explained).
+- The prompt now demands exactly one section per conflict, and the request carries an
+  explicit 16K output-token cap; when a response still hits the cap, the drawer shows
+  "⚠ Output limit reached" instead of pretending the explanation was complete.
