@@ -152,16 +152,18 @@ export function createExplainDrawer(
         body.innerHTML = `<p class="mf-explain-error">${escapeHtml(message)}</p>`;
         return;
       }
-      // Setup guidance rather than a bare failure: the two backends, one button.
+      // Setup guidance rather than a bare failure: the backends, one button.
       body.replaceChildren();
       const info = document.createElement('p');
       info.textContent =
         'No AI backend is available. In VS Code with GitHub Copilot this works out of the box; ' +
         'in Cursor (which does not expose its models to extensions) or without Copilot, ' +
-        'set an Anthropic API key — it is stored in secure storage and used only for explanations.';
+        'set an API key for Anthropic, OpenAI, DeepSeek, Kimi, or any OpenAI-compatible ' +
+        'endpoint (OpenRouter, local Ollama, …). Keys are stored in secure storage and used ' +
+        'only for explanations.';
       const setup = document.createElement('button');
       setup.className = 'mf-explain-setup';
-      setup.textContent = 'Set Anthropic API key';
+      setup.textContent = 'Set AI provider & key';
       setup.addEventListener('click', callbacks.onSetup);
       body.append(info, setup);
     },
