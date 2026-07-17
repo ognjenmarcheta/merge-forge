@@ -31,10 +31,30 @@ export interface InitPayload {
 
 export type MergeAction = 'nextChange' | 'prevChange' | 'applyAllNonConflicting' | 'requestApply';
 
+// --- AI explain -------------------------------------------------------------------
+
+export interface ExplainConflict {
+  /** 1-based position among the file's conflicts, for "Conflict N" headings. */
+  index: number;
+  baseText: string;
+  leftText: string;
+  rightText: string;
+}
+
+export interface ExplainRequest {
+  filePath: string;
+  languageId: string;
+  labels: { left: string; right: string };
+  conflicts: ExplainConflict[];
+}
+
 export type HostToWebviewMessage =
   | { type: 'init'; payload: InitPayload }
   | { type: 'runAction'; action: MergeAction }
-  | { type: 'applyResult'; ok: boolean; error?: string };
+  | { type: 'applyResult'; ok: boolean; error?: string }
+  | { type: 'explainDelta'; text: string }
+  | { type: 'explainDone' }
+  | { type: 'explainError'; message: string; unconfigured?: boolean };
 
 export interface StatePayload {
   totalChunks: number;
@@ -50,6 +70,9 @@ export type WebviewToHostMessage =
   | { type: 'state'; payload: StatePayload }
   | { type: 'apply'; payload: { content: string; eol: Eol } }
   | { type: 'abort' }
+  | { type: 'explain'; payload: ExplainRequest }
+  | { type: 'explainCancel' }
+  | { type: 'openAiSetup' }
   | { type: 'log'; level: 'warn' | 'error'; message: string };
 
 // --- Conflicts dialog (the file-list webview, separate bundle) ---------------------

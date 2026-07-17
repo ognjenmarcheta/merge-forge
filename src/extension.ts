@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { API_KEY_SECRET } from './ai/provider';
 import { listConflicted } from './git/conflicts';
 import { detectOperation } from './git/repoContext';
 import { readStages } from './git/stages';
@@ -85,6 +86,24 @@ export function activate(context: vscode.ExtensionContext): void {
       MergePanel.runOnActive('applyAllNonConflicting'),
     ),
     vscode.commands.registerCommand('mergeForge.diagnostics', () => showDiagnostics(context)),
+    vscode.commands.registerCommand('mergeForge.setApiKey', async () => {
+      const key = await vscode.window.showInputBox({
+        title: 'Anthropic API Key',
+        prompt:
+          'Stored securely in VS Code SecretStorage; used only by "Explain conflicts with AI".',
+        password: true,
+        ignoreFocusOut: true,
+        placeHolder: 'sk-ant-…',
+      });
+      if (key) {
+        await context.secrets.store(API_KEY_SECRET, key.trim());
+        void vscode.window.showInformationMessage('Merge Forge: Anthropic API key saved.');
+      }
+    }),
+    vscode.commands.registerCommand('mergeForge.clearApiKey', async () => {
+      await context.secrets.delete(API_KEY_SECRET);
+      void vscode.window.showInformationMessage('Merge Forge: Anthropic API key removed.');
+    }),
     vscode.window.onDidChangeActiveTextEditor(async (editor) => {
       // Opening a conflicted file can jump straight into the merge editor, for people
       // who would rather never see the markers.

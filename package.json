@@ -1,6 +1,6 @@
 {
   "name": "merge-forge",
-  "displayName": "MergeForge \u2014 JetBrains-style Conflict Resolver",
+  "displayName": "MergeForge — JetBrains-style Conflict Resolver",
   "description": "Resolve Git merge conflicts in a JetBrains/WebStorm-style three-pane visual merge editor.",
   "version": "0.2.0",
   "publisher": "ognjenmarcheta",
@@ -8,7 +8,7 @@
   "private": true,
   "packageManager": "pnpm@9.12.3",
   "engines": {
-    "vscode": "^1.85.0",
+    "vscode": "^1.90.0",
     "node": ">=20"
   },
   "categories": [
@@ -70,6 +70,14 @@
       {
         "command": "mergeForge.abortMerge",
         "title": "Merge Forge: Abort Merge / Rebase / Cherry-Pick"
+      },
+      {
+        "command": "mergeForge.setApiKey",
+        "title": "Merge Forge: Set Anthropic API Key"
+      },
+      {
+        "command": "mergeForge.clearApiKey",
+        "title": "Merge Forge: Clear Anthropic API Key"
       }
     ],
     "menus": {
@@ -152,6 +160,11 @@
           "type": "boolean",
           "default": false,
           "description": "Apply all non-conflicting changes automatically when the merge editor opens."
+        },
+        "mergeForge.ai.model": {
+          "type": "string",
+          "default": "claude-opus-4-8",
+          "description": "Claude model used by \"Explain conflicts with AI\" when calling the Anthropic API directly (the VS Code Language Model API path uses your Copilot model instead)."
         }
       }
     }
@@ -170,9 +183,10 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.112.1",
     "@eslint/js": "^9.31.0",
     "@types/node": "^20.19.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.6.0",
     "diff": "^9.0.0",
     "esbuild": "^0.25.5",
