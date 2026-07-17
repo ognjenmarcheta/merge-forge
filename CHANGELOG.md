@@ -49,3 +49,24 @@ The full JetBrains merge flow around the editor:
   highlights).
 - Conflicts dialog: "N of M resolved" progress and full keyboard navigation
   (arrows, Enter to merge, Space to multi-select).
+
+## 0.3.0 — unreleased
+
+AI conflict explanations and the remaining JetBrains-parity details:
+
+- **✦ Explain conflicts with AI**: a toolbar button streams a per-conflict explanation
+  (what each side changed, why they collide, a suggested resolution) into a drawer above
+  the panes. Two backends, auto-detected: the editor's own Language Model API (VS Code
+  with Copilot — zero configuration) or a direct Anthropic API call. Cursor does not
+  expose its models to extensions, so there set a key once via
+  "Merge Forge: Set Anthropic API Key" (stored in SecretStorage; model configurable via
+  `mergeForge.ai.model`, default `claude-opus-4-8`).
+- **Delete/modify conflicts** get a real dialog: Resolve…/Enter/double-click on such a
+  row asks "deleted in X, modified in Y — Keep Modified File / Delete File". Status
+  columns now also show the correct side mid-rebase.
+- **Status pill live count**: "Merging: 3 conflicts" → "Merging: all resolved", updated
+  as files are resolved; the branch pair lives in the tooltip.
+- **Base line numbers** in the result pane: the original line number next to the current
+  one, `·` where a chunk replaced the base text — JetBrains' dual margin.
+- **File-type icons** and full-path tooltips in the Conflicts dialog.
+- Requires VS Code/Cursor ≥ 1.90.
