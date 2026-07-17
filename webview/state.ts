@@ -16,9 +16,23 @@ const EDIT_SOURCE = 'mergeForge';
  * Our own edits re-pin their decoration afterwards instead of trusting stickiness, since
  * a replacement's end position depends on how the edit is applied.
  */
+/** Chunk states and tracker positions as they were at one exact text version. */
+interface Snapshot {
+  states: Chunk['state'][];
+  ranges: CenterRange[];
+}
+
 export class ChunkStore {
   private readonly texts = new Map<number, ChunkTexts>();
   private readonly trackers = new Map<number, string>();
+  /**
+   * Chunk state at every text version we've seen, keyed by the model's *alternative*
+   * version id — Monaco's id that comes back to the same value when undo/redo lands on
+   * byte-identical text. Text edits are on Monaco's undo stack but chunk states are not,
+   * so this is what lets Cmd+Z restore the whole UI, not just the characters.
+   */
+  private readonly history = new Map<number, Snapshot>();
+  private static readonly HISTORY_LIMIT = 1000;
   private applying = false;
 
   constructor(
@@ -33,7 +47,40 @@ export class ChunkStore {
       this.texts.set(chunk.id, chunkTexts(chunk, base, left, right));
     }
     this.installTrackers();
+    // Seed the initial version, so undoing everything restores the untouched state.
+    this.snapshot();
     this.watchUserEdits();
+  }
+
+  private snapshot(): void {
+    this.history.set(this.model.getAlternativeVersionId(), {
+      states: this.chunks.map((chunk) => chunk.state),
+      ranges: this.chunks.map((chunk) => this.centerRange(chunk.id)),
+    });
+    if (this.history.size > ChunkStore.HISTORY_LIMIT) {
+      const oldest = this.history.keys().next().value;
+      if (oldest !== undefined) {
+        this.history.delete(oldest);
+      }
+    }
+  }
+
+  /**
+   * Puts every chunk back exactly as it was at a snapshot's text version. Trackers are
+   * re-pinned from the stored ranges rather than trusted: an undo that re-inserts text at
+   * a collapsed (deleted-chunk) tracker cannot grow it back through stickiness alone.
+   */
+  private restore(snapshot: Snapshot): void {
+    this.chunks.forEach((chunk, index) => {
+      const state = snapshot.states[index];
+      const range = snapshot.ranges[index];
+      if (state !== undefined) {
+        chunk.state = state;
+      }
+      if (range) {
+        this.repin(chunk, range.start, range.end - range.start);
+      }
+    });
   }
 
   private get model(): monaco.editor.ITextModel {
@@ -103,13 +150,24 @@ export class ChunkStore {
       if (this.applying) {
         return;
       }
-      for (const chunk of this.chunks) {
-        if (chunk.state === 'manuallyEdited') {
-          continue;
+      const snapshot = this.history.get(this.model.getAlternativeVersionId());
+      if (snapshot) {
+        // Undo or redo landed on a version we've seen: the text is byte-identical to
+        // that moment, so the chunk states and tracker positions from then are exact.
+        // Without this, undoing an accept leaves the chunk looking "still applied" and
+        // the mismatch check below would mis-file it as a manual edit.
+        this.restore(snapshot);
+      } else {
+        for (const chunk of this.chunks) {
+          if (chunk.state === 'manuallyEdited') {
+            continue;
+          }
+          if (this.actualText(chunk) !== this.expectedText(chunk)) {
+            chunk.state = 'manuallyEdited';
+          }
         }
-        if (this.actualText(chunk) !== this.expectedText(chunk)) {
-          chunk.state = 'manuallyEdited';
-        }
+        // Record this version too, so undoing *typing* also restores states.
+        this.snapshot();
       }
       // Even with no state change the text moved, so the layout must be recomputed.
       this.onChange();
@@ -140,9 +198,13 @@ export class ChunkStore {
     const model = this.model;
     this.applying = true;
     try {
+      // Undo stops on both sides make each accept its own Cmd+Z step; consecutive
+      // executeEdits calls would otherwise coalesce into one opaque undo unit.
+      this.editor.pushUndoStop();
       this.editor.executeEdits(EDIT_SOURCE, [
         { range: toMonacoRange(model, range), text: joinLines(resolution.lines) },
       ]);
+      this.editor.pushUndoStop();
       chunk.state = resolution.state;
       // Re-pin over exactly the text we just wrote. Stickiness decides how a decoration
       // reacts to edits at its edges, which is not a question with a right answer for a
@@ -151,6 +213,7 @@ export class ChunkStore {
     } finally {
       this.applying = false;
     }
+    this.snapshot();
     this.onChange();
     return true;
   }

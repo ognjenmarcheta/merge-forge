@@ -45,6 +45,10 @@ function makeVscodeStub(recorded: Recorded): Record<string, unknown> {
       }
     },
     ViewColumn: { Active: -1 },
+    StatusBarAlignment: { Left: 1, Right: 2 },
+    ThemeColor: class {
+      constructor(readonly id: string) {}
+    },
     commands: {
       registerCommand: (id: string) => {
         recorded.commands.push(id);
@@ -55,6 +59,15 @@ function makeVscodeStub(recorded: Recorded): Record<string, unknown> {
     window: {
       activeTextEditor: undefined,
       createOutputChannel: () => ({ appendLine: () => {}, show: () => {}, dispose: () => {} }),
+      createStatusBarItem: () => ({
+        text: '',
+        tooltip: '',
+        command: undefined,
+        backgroundColor: undefined,
+        show: () => {},
+        hide: () => {},
+        dispose: () => {},
+      }),
       createWebviewPanel: () => {
         throw new Error('not expected during activation');
       },

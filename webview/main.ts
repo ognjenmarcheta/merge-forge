@@ -228,6 +228,9 @@ function start(payload: InitPayload): void {
     store.applyMany((chunk) => nonConflictingAction(chunk));
   }
   refresh();
+
+  // Debug handle for the dev harness (dev/harness*.html); inert inside a real webview.
+  (window as unknown as Record<string, unknown>).__mfSession = session;
 }
 
 /** Lets the user choose the result's line ending when the sides disagree. */

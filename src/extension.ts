@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import * as vscode from 'vscode';
 import { listConflicted } from './git/conflicts';
 import { detectOperation } from './git/repoContext';
@@ -7,18 +6,24 @@ import { MergePanel } from './panel/MergePanel';
 import { ConflictCodeLensProvider } from './ui/codeLens';
 import { activeRepoRoot, pickConflictedFile } from './ui/conflictPicker';
 import { ContextKeys } from './ui/contextKeys';
+import { ResolveHint } from './ui/resolveHint';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const contextKeys = new ContextKeys(context);
+  const hint = new ResolveHint(context);
+  let conflictedPaths = new Set<string>();
+  const isConflicted = (editor: vscode.TextEditor | undefined): boolean =>
+    editor !== undefined && conflictedPaths.has(editor.document.uri.fsPath);
+
+  // ContextKeys owns the single .git/index watcher; every other affordance — the menus'
+  // context keys, the CodeLens, the status-bar hint — follows its refreshes.
+  const contextKeys = new ContextKeys(context, (absolutePaths) => {
+    conflictedPaths = new Set(absolutePaths);
+    codeLens.refresh();
+    hint.update(vscode.window.activeTextEditor, isConflicted(vscode.window.activeTextEditor));
+  });
   contextKeys.register();
 
-  let conflictedPaths = new Set<string>();
-  const refreshConflicted = async (): Promise<void> => {
-    const repoRoot = await activeRepoRoot();
-    const paths = repoRoot ? await listConflicted(repoRoot).catch(() => []) : [];
-    conflictedPaths = new Set(paths.map((path) => join(repoRoot!, path)));
-    codeLens.refresh();
-  };
+  const refreshConflicted = (): Promise<void> => contextKeys.refresh();
   const codeLens = new ConflictCodeLensProvider((uri) => conflictedPaths.has(uri.fsPath));
 
   const open = async (uri?: vscode.Uri): Promise<void> => {
@@ -59,13 +64,14 @@ export function activate(context: vscode.ExtensionContext): void {
       MergePanel.runOnActive('applyAllNonConflicting'),
     ),
     vscode.commands.registerCommand('mergeForge.diagnostics', () => showDiagnostics(context)),
-    // Opening a conflicted file can jump straight into the merge editor, for people who
-    // would rather never see the markers.
     vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-      if (!editor || !readAutoOpen() || !conflictedPaths.has(editor.document.uri.fsPath)) {
-        return;
+      const conflicted = isConflicted(editor);
+      hint.update(editor, conflicted);
+      // Opening a conflicted file can jump straight into the merge editor, for people
+      // who would rather never see the markers.
+      if (editor && conflicted && readAutoOpen()) {
+        await MergePanel.createOrShow(context, editor.document.uri);
       }
-      await MergePanel.createOrShow(context, editor.document.uri);
     }),
   );
 

@@ -16,7 +16,12 @@ export class ContextKeys {
   private conflicted: string[] = [];
   private repoRoot: string | undefined;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    /** Fires with the absolute conflicted paths after every refresh, so the other
+     * affordances (CodeLens, status bar, toast) follow the same single watcher. */
+    private readonly onDidRefresh?: (conflictedAbsolutePaths: string[]) => void,
+  ) {}
 
   register(): void {
     // The index changes on merge, rebase, `git add`, and abort alike — watching the file
@@ -43,6 +48,7 @@ export class ContextKeys {
     await setContext('mergeForge.hasConflicts', this.conflicted.length > 0);
     await setContext('mergeForge.conflictedPaths', absolute);
     this.refreshActiveEditor(vscode.window.activeTextEditor);
+    this.onDidRefresh?.(absolute);
   }
 
   /**
