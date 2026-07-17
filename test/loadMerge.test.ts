@@ -37,14 +37,15 @@ describe('loadMergeInputs', () => {
     expect(payload.left).toContain('OURS two');
     expect(payload.right).toContain('THEIRS two');
     expect(payload.base).toBe('one\ntwo\nthree\n');
-    expect(payload.labels.left).toBe('Yours (local)');
+    expect(payload.labels).toEqual({ left: 'main', right: 'feature' });
   });
 
   test('still puts YOUR commit on the left during a rebase, despite git swapping stages', async () => {
     const { payload } = await loadMergeInputs(rebaseRepo, 'modify-modify.txt', 'auto');
     expect(payload.left).toContain('OURS two');
     expect(payload.right).toContain('THEIRS two');
-    expect(payload.labels.left).toBe('Yours (being rebased)');
+    // Even mid-rebase (detached HEAD) the left pane must carry YOUR branch's name.
+    expect(payload.labels).toEqual({ left: 'main', right: 'feature' });
   });
 
   test('treats a both-added conflict as having an empty base', async () => {

@@ -1,7 +1,7 @@
 import { basename, relative } from 'node:path';
 import type { InitPayload } from '../protocol';
 import { makeEolInfo, normalizeEol, type EolSetting } from '../merge/lineEndings';
-import { detectOperation } from './repoContext';
+import { detectOperation, getMergeBranches } from './repoContext';
 import { readStages } from './stages';
 
 /** Why a conflicted file cannot be opened in the three-pane editor. */
@@ -35,9 +35,10 @@ export async function loadMergeInputs(
   relativePath: string,
   eolSetting: EolSetting,
 ): Promise<MergeInputs> {
-  const [stages, operation] = await Promise.all([
+  const [stages, operation, branches] = await Promise.all([
     readStages(repoRoot, relativePath),
     detectOperation(repoRoot),
+    getMergeBranches(repoRoot),
   ]);
 
   // git's stage 2 is "ours" and stage 3 is "theirs", but during a rebase those are the
@@ -71,25 +72,12 @@ export async function loadMergeInputs(
       left: normalizeEol(left),
       base: normalizeEol(base),
       right: normalizeEol(right),
-      labels: labelsFor(operation.kind),
+      // Pane headers render these as "Changes from <label>", matching JetBrains.
+      labels: { left: branches.yours, right: branches.theirs },
       eol: makeEolInfo(left, base, right, eolSetting),
       settings: { autoApplyNonConflicting: false },
     },
   };
-}
-
-function labelsFor(kind: Awaited<ReturnType<typeof detectOperation>>['kind']): {
-  left: string;
-  right: string;
-} {
-  switch (kind) {
-    case 'rebase':
-      return { left: 'Yours (being rebased)', right: 'Theirs (upstream)' };
-    case 'cherry-pick':
-      return { left: 'Yours (being applied)', right: 'Theirs (current branch)' };
-    default:
-      return { left: 'Yours (local)', right: 'Theirs (incoming)' };
-  }
 }
 
 function emptyPayload(relativePath: string): InitPayload {

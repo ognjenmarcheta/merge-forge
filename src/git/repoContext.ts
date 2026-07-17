@@ -1,6 +1,7 @@
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { gitText } from './gitCli';
+import { refToBranchName } from './resolveOps';
 
 /** The git operation that produced the current conflicts. */
 export type OperationKind = 'merge' | 'rebase' | 'cherry-pick' | 'unknown';
@@ -59,6 +60,61 @@ export async function detectOperation(repoRoot: string): Promise<Operation> {
     return { kind: 'merge', swapPresentation: false };
   }
   return { kind: 'unknown', swapPresentation: false };
+}
+
+/** Branch names for display: "Merging <theirs> into <yours>". */
+export interface MergeBranches {
+  yours: string;
+  theirs: string;
+}
+
+async function tryGit(repoRoot: string, args: string[]): Promise<string | undefined> {
+  try {
+    const value = await gitText(repoRoot, args);
+    return value === '' ? undefined : value;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readGitFile(repoRoot: string, name: string): Promise<string | undefined> {
+  try {
+    return (await readFile(await gitPath(repoRoot, name), 'utf8')).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Works out the two branch names involved in the current operation, for labels like
+ * "Merging main into feature" and the pane headers.
+ *
+ * The wrinkle is rebase: HEAD is detached mid-rebase, so `branch --show-current` is
+ * empty and your branch's name only exists in `.git/rebase-merge/head-name`. The other
+ * side comes from resolving the `onto` commit back to a name. Every lookup degrades to a
+ * generic label rather than failing — these strings are display-only.
+ */
+export async function getMergeBranches(repoRoot: string): Promise<MergeBranches> {
+  const operation = await detectOperation(repoRoot);
+
+  if (operation.kind === 'rebase') {
+    const headName =
+      (await readGitFile(repoRoot, 'rebase-merge/head-name')) ??
+      (await readGitFile(repoRoot, 'rebase-apply/head-name'));
+    const onto = await readGitFile(repoRoot, 'rebase-merge/onto');
+    const ontoName = onto
+      ? await tryGit(repoRoot, ['name-rev', '--name-only', onto])
+      : undefined;
+    return {
+      yours: headName ? refToBranchName(headName) : 'yours',
+      theirs: ontoName ?? 'upstream',
+    };
+  }
+
+  const current = await tryGit(repoRoot, ['branch', '--show-current']);
+  const incomingRef = operation.kind === 'cherry-pick' ? 'CHERRY_PICK_HEAD' : 'MERGE_HEAD';
+  const incoming = await tryGit(repoRoot, ['name-rev', '--name-only', incomingRef]);
+  return { yours: current ?? 'yours', theirs: incoming ?? 'theirs' };
 }
 
 /**
