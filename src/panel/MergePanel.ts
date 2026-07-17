@@ -1,5 +1,6 @@
 import { relative } from 'node:path';
 import * as vscode from 'vscode';
+import { getExplainProvider } from '../ai/provider';
 import { applyResolved } from '../git/applyResult';
 import { listConflicted } from '../git/conflicts';
 import { loadMergeInputs, type UnsupportedReason } from '../git/loadMerge';
@@ -7,6 +8,7 @@ import { findRepoRoot } from '../git/repoContext';
 import type { EolSetting } from '../merge/lineEndings';
 import type {
   Eol,
+  ExplainRequest,
   HostToWebviewMessage,
   InitPayload,
   MergeAction,
@@ -23,6 +25,8 @@ export class MergePanel {
   private static readonly panels = new Map<string, MergePanel>();
 
   private latestState: StatePayload | undefined;
+  /** Cancels the in-flight AI explanation; recreated per request. */
+  private explainCancellation: vscode.CancellationTokenSource | undefined;
 
   static async createOrShow(context: vscode.ExtensionContext, uri: vscode.Uri): Promise<void> {
     const key = uri.toString();
@@ -90,7 +94,7 @@ export class MergePanel {
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
-    context: vscode.ExtensionContext,
+    private readonly context: vscode.ExtensionContext,
     private readonly key: string,
     readonly uri: vscode.Uri,
     private readonly payload: InitPayload,
@@ -101,6 +105,7 @@ export class MergePanel {
     this.panel.webview.html = getWebviewHtml(this.panel.webview, context.extensionUri);
     this.panel.onDidDispose(() => {
       MergePanel.panels.delete(this.key);
+      this.cancelExplain();
       void vscode.commands.executeCommand('setContext', 'mergeForge.panelFocused', false);
     });
     this.panel.onDidChangeViewState(() => {
@@ -136,7 +141,50 @@ export class MergePanel {
       case 'apply':
         void this.apply(message.payload.content, message.payload.eol);
         break;
+      case 'explain':
+        void this.explain(message.payload);
+        break;
+      case 'explainCancel':
+        this.cancelExplain();
+        break;
+      case 'openAiSetup':
+        void vscode.commands.executeCommand('mergeForge.setApiKey');
+        break;
     }
+  }
+
+  /** Streams an AI explanation of the file's conflicts back into the webview drawer. */
+  private async explain(request: ExplainRequest): Promise<void> {
+    this.cancelExplain();
+    const cancellation = new vscode.CancellationTokenSource();
+    this.explainCancellation = cancellation;
+    const provider = await getExplainProvider(this.context);
+    if (provider.kind === 'unconfigured') {
+      this.post({
+        type: 'explainError',
+        message: 'No AI backend is configured.',
+        unconfigured: true,
+      });
+      return;
+    }
+    if (cancellation.token.isCancellationRequested) {
+      return;
+    }
+    await provider.explain(
+      request,
+      {
+        onDelta: (text) => this.post({ type: 'explainDelta', text }),
+        onDone: () => this.post({ type: 'explainDone' }),
+        onError: (message) => this.post({ type: 'explainError', message }),
+      },
+      cancellation.token,
+    );
+  }
+
+  private cancelExplain(): void {
+    this.explainCancellation?.cancel();
+    this.explainCancellation?.dispose();
+    this.explainCancellation = undefined;
   }
 
   /**
