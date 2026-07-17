@@ -12,6 +12,7 @@ export interface ToolbarActions {
   previous: () => void;
   setWhitespace: (mode: WhitespaceMode) => void;
   setHighlight: (mode: HighlightMode) => void;
+  explain: () => void;
 }
 
 export interface FooterActions {
@@ -100,6 +101,7 @@ export function buildToolbar(
     'Apply all non-conflicting changes',
     actions.applyAllNonConflicting,
   );
+  const explain = iconButton('sparkle', 'Explain conflicts with AI', actions.explain);
 
   const whitespace = select<WhitespaceMode>(
     'How whitespace differences are treated when comparing',
@@ -129,6 +131,8 @@ export function buildToolbar(
     fromRight,
     applyAll,
     separator(),
+    explain,
+    separator(),
     whitespace,
     highlight,
     counter,
@@ -156,6 +160,12 @@ export function buildToolbar(
         : 'Apply non-conflicting changes from the right side';
       previous.toggleAttribute('disabled', chunks.length === 0);
       next.toggleAttribute('disabled', chunks.length === 0);
+
+      const noConflicts = conflicts === 0;
+      explain.toggleAttribute('disabled', noConflicts);
+      explain.title = noConflicts
+        ? 'No unresolved conflicts to explain'
+        : 'Explain conflicts with AI';
 
       counter.classList.toggle('mf-done', pending.length === 0);
       if (chunks.length === 0) {

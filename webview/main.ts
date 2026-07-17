@@ -1,10 +1,11 @@
 import './styles.css';
 import type { Chunk } from '../src/merge/chunk';
 import { computeChunks, splitLines, type WhitespaceMode } from '../src/merge/engine';
-import { nonConflictingAction, sideControls } from '../src/merge/resolve';
+import { chunkTexts, nonConflictingAction, sideControls } from '../src/merge/resolve';
 import { wordHighlights } from '../src/merge/wordDiff';
 import type {
   Eol,
+  ExplainRequest,
   HostToWebviewMessage,
   InitPayload,
   MergeAction,
@@ -14,6 +15,7 @@ import { computeSegments, computeSpacers } from './alignment';
 import { Connectors } from './connectors';
 import { renderDecorations, type ChunkWordRanges } from './decorations';
 import { createPanes, type Panes } from './editors';
+import { createExplainDrawer, type ExplainDrawer } from './explainDrawer';
 import { buildLayout } from './layout';
 import { configureMonacoWorker } from './monaco';
 import type { monaco } from './monaco';
@@ -63,6 +65,7 @@ interface Session {
 }
 
 let session: Session | undefined;
+let drawer: ExplainDrawer | undefined;
 let cursor = -1;
 let flashTimer: number | undefined;
 
@@ -250,6 +253,35 @@ function requestApply(): void {
   post({ type: 'apply', payload: { content: session.store.result(), eol: session.zone } });
 }
 
+/** Ships the unresolved conflicts (base + both sides) to the host for an AI explanation. */
+function requestExplain(): void {
+  if (!session || !drawer) {
+    return;
+  }
+  const { payload } = session;
+  const conflicts = session.chunks.filter((c) => c.kind === 'conflict' && c.state === 'initial');
+  if (conflicts.length === 0) {
+    return;
+  }
+  const request: ExplainRequest = {
+    filePath: payload.filePath,
+    languageId: payload.languageId,
+    labels: payload.labels,
+    conflicts: conflicts.map((chunk, position) => {
+      // Lines are terminator-inclusive, so joining with '' reconstructs the exact text.
+      const texts = chunkTexts(chunk, payload.base, payload.left, payload.right);
+      return {
+        index: position + 1,
+        baseText: texts.base.join(''),
+        leftText: texts.left.join(''),
+        rightText: texts.right.join(''),
+      };
+    }),
+  };
+  drawer.openLoading();
+  post({ type: 'explain', payload: request });
+}
+
 /**
  * Builds (or rebuilds) the chunk model over the existing panes. Rebuilding happens when
  * the whitespace mode changes: the center resets to base and every decision starts over,
@@ -361,6 +393,11 @@ function start(payload: InitPayload): void {
     },
   };
 
+  drawer = createExplainDrawer(layout.explainHost, {
+    onCancel: () => post({ type: 'explainCancel' }),
+    onSetup: () => post({ type: 'openAiSetup' }),
+  });
+
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {
     applyAllNonConflicting: applyAllSafe,
     applyNonConflictingFrom: (side) =>
@@ -374,6 +411,7 @@ function start(payload: InitPayload): void {
         refresh();
       }
     },
+    explain: requestExplain,
   });
   layout.doneAction.addEventListener('click', requestApply);
   buildFooter(layout.footer, {
@@ -457,6 +495,12 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
     start(message.payload);
   } else if (message.type === 'runAction') {
     runAction(message.action);
+  } else if (message.type === 'explainDelta') {
+    drawer?.appendDelta(message.text);
+  } else if (message.type === 'explainDone') {
+    drawer?.finish();
+  } else if (message.type === 'explainError') {
+    drawer?.showError(message.message, message.unconfigured === true);
   }
 });
 

@@ -7,6 +7,8 @@ export interface Layout {
   confirmBar: HTMLElement;
   toolbar: HTMLElement;
   counter: HTMLElement;
+  /** Host for the AI explanation drawer, between toolbar and panes. */
+  explainHost: HTMLElement;
   hosts: Record<PaneName, HTMLElement>;
   /** Gutter strips: `leftStrip` sits between the left and center panes. */
   leftStrip: HTMLElement;
@@ -44,6 +46,7 @@ export function buildLayout(
   const confirmBar = element('div', 'mf-banner mf-hidden');
   const toolbar = element('div', 'mf-toolbar');
   const counter = element('div', 'mf-counter');
+  const explainHost = element('div', 'mf-explain mf-hidden');
   const panes = element('div', 'mf-panes');
   const footer = element('div', 'mf-footer');
 
@@ -63,7 +66,7 @@ export function buildLayout(
   center.pane.append(doneCard);
 
   panes.append(left.pane, leftStrip, center.pane, rightStrip, right.pane);
-  root.replaceChildren(banner, confirmBar, toolbar, panes, footer);
+  root.replaceChildren(banner, confirmBar, toolbar, explainHost, panes, footer);
 
   return {
     root,
@@ -71,6 +74,7 @@ export function buildLayout(
     confirmBar,
     toolbar,
     counter,
+    explainHost,
     hosts: { left: left.host, center: center.host, right: right.host },
     leftStrip,
     rightStrip,
