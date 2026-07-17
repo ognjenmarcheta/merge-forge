@@ -1,7 +1,7 @@
 import type { Chunk } from '../src/merge/chunk';
-import type { CenterRange } from './alignment';
-import { visualOf } from './alignment';
-import type { Panes } from './editors';
+import type { CenterRange, PixelExtent } from './alignment';
+import { rowExtent, visualOf } from './alignment';
+import { LINE_HEIGHT, type Panes } from './editors';
 import type { monaco } from './monaco';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -48,9 +48,33 @@ export class Connectors {
     this.host.append(this.svg, this.buttons);
   }
 
-  /** Pixel offset of an editor line from the top of the visible area. */
+  /** Pixel offset of an editor line's top from the top of the visible area. */
   private yOf(editor: monaco.editor.IStandaloneCodeEditor, line: number): number {
     return editor.getTopForLineNumber(line + 1) - editor.getScrollTop();
+  }
+
+  /**
+   * The pixel span a chunk occupies in one pane — its solid block, or its padding
+   * zone's span when it has no lines there.
+   *
+   * The anchor is the whole trick (and where the old misalignment lived): a non-empty
+   * block anchors at its first line's top, but an empty side's zone sits *before* its
+   * anchor line, so its span starts at the bottom of the *previous* line — which also
+   * covers a zone above line 0 (document top) and one after the last line (EOF insert).
+   */
+  private extentOf(
+    editor: monaco.editor.IStandaloneCodeEditor,
+    range: { start: number; end: number },
+    maxLines: number,
+  ): PixelExtent {
+    const own = range.end - range.start;
+    const anchor =
+      own > 0
+        ? this.yOf(editor, range.start)
+        : range.start > 0
+          ? this.yOf(editor, range.start - 1) + LINE_HEIGHT
+          : -editor.getScrollTop();
+    return rowExtent(own, maxLines, anchor, LINE_HEIGHT);
   }
 
   render(chunks: readonly Chunk[], centerRanges: ReadonlyMap<number, CenterRange>): void {
@@ -73,17 +97,24 @@ export class Connectors {
         continue;
       }
 
-      const oTop = this.yOf(outer, outerRange.start);
-      const oBottom = this.yOf(outer, Math.max(outerRange.start, outerRange.end));
-      const cTop = this.yOf(center, centerRange.start);
-      const cBottom = this.yOf(center, Math.max(centerRange.start, centerRange.end));
+      // Padding goes to the tallest of all three panes — extents must use the same max.
+      const maxLines = Math.max(
+        chunk.left.end - chunk.left.start,
+        centerRange.end - centerRange.start,
+        chunk.right.end - chunk.right.start,
+      );
+      const outerExtent = this.extentOf(outer, outerRange, maxLines);
+      const centerExtent = this.extentOf(center, centerRange, maxLines);
 
-      if (Math.max(oBottom, cBottom) < 0 || Math.min(oTop, cTop) > height) {
+      if (
+        Math.max(outerExtent.bottom, centerExtent.bottom) < 0 ||
+        Math.min(outerExtent.top, centerExtent.top) > height
+      ) {
         continue; // fully scrolled out of view
       }
 
-      shapes.push(this.band(chunk, width, oTop, oBottom, cTop, cBottom));
-      controls.push(...this.controlsFor(chunk, oTop));
+      shapes.push(this.band(chunk, width, outerExtent, centerExtent));
+      controls.push(...this.controlsFor(chunk, outerExtent.top));
     }
 
     this.svg.replaceChildren(...shapes);
@@ -91,31 +122,24 @@ export class Connectors {
   }
 
   /**
-   * The WebStorm connector: an S-curved band from the chunk's rows in the outer pane to
-   * its rows in the result. Horizontal-tangent beziers give the smooth flow; a collapsed
-   * end (a pure insertion or deletion) narrows to a near-line pointing into the gap.
+   * The WebStorm connector: an S-curved band from the chunk's block in the outer pane to
+   * its block (or zone span) in the result. Horizontal-tangent beziers give the smooth
+   * flow; equal extents flatten into a flush rectangle, differing ones do real bridging.
    */
-  private band(
-    chunk: Chunk,
-    width: number,
-    oTop: number,
-    oBottom: number,
-    cTop: number,
-    cBottom: number,
-  ): SVGElement {
+  private band(chunk: Chunk, width: number, outer: PixelExtent, center: PixelExtent): SVGElement {
     const [xOuter, xCenter] = this.side === 'left' ? [0, width] : [width, 0];
     const mid = width / 2;
-    // A zero-height side still needs a visible edge to point at.
-    const oB = Math.max(oBottom, oTop + 1.5);
-    const cB = Math.max(cBottom, cTop + 1.5);
+    // Degenerate spans (max 0 lines can't happen, but guard) keep a visible edge.
+    const oBottom = Math.max(outer.bottom, outer.top + 1.5);
+    const cBottom = Math.max(center.bottom, center.top + 1.5);
 
     const path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute(
       'd',
-      `M ${xOuter} ${oTop} ` +
-        `C ${mid} ${oTop} ${mid} ${cTop} ${xCenter} ${cTop} ` +
-        `L ${xCenter} ${cB} ` +
-        `C ${mid} ${cB} ${mid} ${oB} ${xOuter} ${oB} Z`,
+      `M ${xOuter} ${outer.top} ` +
+        `C ${mid} ${outer.top} ${mid} ${center.top} ${xCenter} ${center.top} ` +
+        `L ${xCenter} ${cBottom} ` +
+        `C ${mid} ${cBottom} ${mid} ${oBottom} ${xOuter} ${oBottom} Z`,
     );
     const colors = COLORS[visualOf(chunk)];
     path.setAttribute('fill', colors.fill);

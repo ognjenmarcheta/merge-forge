@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeSegments, computeSpacers, type CenterRange } from '../webview/alignment';
+import { computeSegments, computeSpacers, rowExtent, type CenterRange } from '../webview/alignment';
 import { computeChunks } from '../src/merge/engine';
 import { splitLines } from '../src/merge/engine';
 
@@ -119,6 +119,28 @@ describe('computeSpacers — the alignment invariant', () => {
       expect(spacer.heightInLines).toBeGreaterThan(0);
       expect(spacer.afterLine).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe('rowExtent — connector band geometry', () => {
+  const lh = 18;
+
+  test('a non-empty block spans exactly its own lines from its anchor', () => {
+    expect(rowExtent(3, 5, 100, lh)).toEqual({ top: 100, bottom: 100 + 3 * lh });
+  });
+
+  test('an empty side spans its padding zone — the full row height', () => {
+    // Anchor here is the bottom of the line the zone follows; the zone is maxLines tall.
+    expect(rowExtent(0, 5, 100, lh)).toEqual({ top: 100, bottom: 100 + 5 * lh });
+  });
+
+  test('a zone above line 0 anchors at the document top', () => {
+    expect(rowExtent(0, 2, 0, lh)).toEqual({ top: 0, bottom: 2 * lh });
+  });
+
+  test('own === max means no zone and both arms agree', () => {
+    expect(rowExtent(4, 4, 50, lh)).toEqual(rowExtent(4, 4, 50, lh));
+    expect(rowExtent(4, 4, 50, lh).bottom).toBe(50 + 4 * lh);
   });
 });
 

@@ -5,6 +5,12 @@ import { THEME_NAME } from './theme';
 export type Panes = Record<PaneName, monaco.editor.IStandaloneCodeEditor>;
 
 /**
+ * One fixed line height across all panes. Alignment and connector geometry both convert
+ * line counts to pixels with this — it must match `paneOptions` exactly.
+ */
+export const LINE_HEIGHT = 18;
+
+/**
  * Options shared by all three panes.
  *
  * The alignment strategy pads panes with view zones so equal content occupies equal
@@ -35,7 +41,7 @@ function paneOptions(readOnly: boolean): monaco.editor.IStandaloneEditorConstruc
       handleMouseWheel: true,
     },
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: LINE_HEIGHT,
   };
 }
 

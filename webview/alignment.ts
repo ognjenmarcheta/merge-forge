@@ -108,6 +108,31 @@ export function computeSegments(
   return segments;
 }
 
+/** A vertical pixel span within a pane. */
+export interface PixelExtent {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * The pixel span a chunk occupies in one pane: its solid content block when it has
+ * lines, or its padding zone's full span when it has none.
+ *
+ * The anchor differs by case, and picking the wrong one is exactly the bug this fixes —
+ * for `own > 0` pass the *top of the first content line*; for `own === 0` pass the
+ * *bottom of the line the zone follows* (or the document top for a zone above line 0).
+ * `computeSpacers` gives an empty side a zone of `maxLines`, so that is the empty span.
+ */
+export function rowExtent(
+  ownLines: number,
+  maxLines: number,
+  anchor: number,
+  lineHeight: number,
+): PixelExtent {
+  const span = (ownLines > 0 ? ownLines : maxLines) * lineHeight;
+  return { top: anchor, bottom: anchor + span };
+}
+
 /** Padding to insert after a line so a pane matches the tallest pane for that row. */
 export interface Spacer {
   /** 0-based line to insert after; Monaco reads this as its 1-based `afterLineNumber`. */
