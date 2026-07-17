@@ -66,6 +66,8 @@ export interface ConflictsData {
   files: ConflictFileEntry[];
   branches: { yours: string; theirs: string };
   operation: 'merge' | 'rebase' | 'cherry-pick' | 'unknown';
+  /** Most files seen conflicted this operation — the denominator for "2 of 5 resolved". */
+  totalAtStart: number;
 }
 
 export type HostToConflictsMessage = { type: 'conflicts'; payload: ConflictsData };

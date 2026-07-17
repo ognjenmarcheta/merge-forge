@@ -12,6 +12,8 @@ import { getConflictsHtml } from './html';
  */
 export class ConflictsPanel {
   private static current: ConflictsPanel | undefined;
+  /** High-water mark of conflicted files for the current operation. */
+  private totalAtStart = 0;
 
   static show(context: vscode.ExtensionContext, repoRoot: string): void {
     if (ConflictsPanel.current) {
@@ -66,6 +68,13 @@ export class ConflictsPanel {
       getMergeBranches(this.repoRoot),
       detectOperation(this.repoRoot),
     ]);
+    // Reset the denominator when a new batch of conflicts appears from zero.
+    if (this.totalAtStart === 0 || files.length > this.totalAtStart) {
+      this.totalAtStart = files.length;
+    }
+    if (files.length === 0 && operation.kind === 'unknown') {
+      this.totalAtStart = 0;
+    }
     const payload: ConflictsData = {
       files: files.map((file) => ({
         ...file,
@@ -74,6 +83,7 @@ export class ConflictsPanel {
       })),
       branches,
       operation: operation.kind,
+      totalAtStart: this.totalAtStart,
     };
     this.post({ type: 'conflicts', payload });
   }

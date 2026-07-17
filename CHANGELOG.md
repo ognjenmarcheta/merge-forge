@@ -37,3 +37,15 @@ The full JetBrains merge flow around the editor:
 - Undoing a whole-file accept reverses it in one step; changing whitespace handling
   recomputes changes behind an inline confirmation.
 - The per-file status-bar hint and toast were replaced by the cluster + dialog.
+
+### Polish round (0.2.0, continued)
+
+- Keyboard-first flow: Alt+←/→ accept the current chunk's sides, every action
+  auto-advances to the next pending change, and the editor opens on the first one.
+- VS Code's codicon font replaces the unicode glyphs across toolbar and controls.
+- Hovering a connector band highlights its chunk in all three panes; disabled
+  bulk buttons explain why.
+- Light-theme palette for every chunk surface (fills, hatches, bands, word
+  highlights).
+- Conflicts dialog: "N of M resolved" progress and full keyboard navigation
+  (arrows, Enter to merge, Space to multi-select).

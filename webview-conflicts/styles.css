@@ -192,3 +192,9 @@ button:disabled {
   color: var(--vscode-testing-iconPassed, #4ec94e);
   font-size: 1.1em;
 }
+
+.cf-progress {
+  float: right;
+  opacity: 0.75;
+  font-size: 0.9em;
+}

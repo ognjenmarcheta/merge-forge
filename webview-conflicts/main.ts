@@ -233,13 +233,16 @@ function render(): void {
         ? 'Cherry-picking'
         : 'Merging';
   const title = element('div', 'cf-title');
-  title.innerHTML = '';
   title.append(
     document.createTextNode(`${verb} branch `),
     element('b', undefined, data.branches.theirs),
     document.createTextNode(' into branch '),
     element('b', undefined, data.branches.yours),
   );
+  if (data.totalAtStart > 0) {
+    const resolved = data.totalAtStart - data.files.length;
+    title.append(element('span', 'cf-progress', `${resolved} of ${data.totalAtStart} resolved`));
+  }
 
   const body = element('div', 'cf-body');
   if (data.files.length === 0) {
@@ -273,6 +276,49 @@ function render(): void {
 window.addEventListener('message', (event: MessageEvent<HostToConflictsMessage>) => {
   if (event.data.type === 'conflicts') {
     data = event.data.payload;
+    render();
+  }
+});
+
+// Keyboard: arrows walk the visible (grouped) order, Enter merges a single mergeable
+// selection, Space toggles multi-select membership like a cmd-click.
+window.addEventListener('keydown', (event) => {
+  const order = visibleOrder();
+  if (order.length === 0) {
+    return;
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const currentIndex = anchorPath ? order.findIndex((f) => f.path === anchorPath) : -1;
+    const nextIndex = Math.min(
+      order.length - 1,
+      Math.max(0, currentIndex + (event.key === 'ArrowDown' ? 1 : -1)),
+    );
+    const target = order[nextIndex]!;
+    selected.clear();
+    selected.add(target.path);
+    anchorPath = target.path;
+    render();
+    [...document.querySelectorAll('.cf-row')]
+      .find((row) => (row.querySelector('.cf-name') as HTMLElement)?.title === target.path)
+      ?.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (event.key === 'Enter') {
+    const chosen = order.filter((f) => selected.has(f.path));
+    if (chosen.length === 1 && chosen[0]!.mergeable) {
+      event.preventDefault();
+      post({ type: 'openMerge', payload: { path: chosen[0]!.path } });
+    }
+    return;
+  }
+  if (event.key === ' ' && anchorPath) {
+    event.preventDefault();
+    if (selected.has(anchorPath) && selected.size > 1) {
+      selected.delete(anchorPath);
+    } else {
+      selected.add(anchorPath);
+    }
     render();
   }
 });
