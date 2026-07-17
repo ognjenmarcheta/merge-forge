@@ -16,6 +16,11 @@ export interface ConnectorCallbacks {
   canIgnore: (chunk: Chunk) => boolean;
 }
 
+/** Moves a pixel extent into the strip's coordinate space. */
+function shift(extent: PixelExtent, by: number): PixelExtent {
+  return { top: extent.top + by, bottom: extent.bottom + by };
+}
+
 /** Fill and edge colours per chunk family — the same palette the line fills use. */
 const COLORS: Record<ReturnType<typeof visualOf>, { fill: string; edge: string }> = {
   conf: { fill: 'rgba(199, 84, 80, 0.30)', edge: 'rgba(199, 84, 80, 0.75)' },
@@ -77,11 +82,29 @@ export class Connectors {
     return rowExtent(own, maxLines, anchor, LINE_HEIGHT);
   }
 
+  /**
+   * Vertical distance from the strip's drawing surface to an editor's content origin.
+   *
+   * Editor y-coordinates start below the pane *header*, while the strip spans the whole
+   * pane row — comparing rects against the SVG surface (the merge-studio "stage"
+   * technique) makes the geometry page-true regardless of DOM nesting, fonts, or zoom.
+   * Skipping this is exactly the ~25px systematic offset the screenshots showed.
+   */
+  private editorOffset(editor: monaco.editor.IStandaloneCodeEditor): number {
+    const dom = editor.getDomNode();
+    if (!dom) {
+      return 0;
+    }
+    return dom.getBoundingClientRect().top - this.svg.getBoundingClientRect().top;
+  }
+
   render(chunks: readonly Chunk[], centerRanges: ReadonlyMap<number, CenterRange>): void {
     const outer = this.panes[this.side];
     const center = this.panes.center;
     const width = this.host.clientWidth;
     const height = this.host.clientHeight;
+    const outerShift = this.editorOffset(outer);
+    const centerShift = this.editorOffset(center);
 
     const shapes: SVGElement[] = [];
     const controls: HTMLElement[] = [];
@@ -103,8 +126,8 @@ export class Connectors {
         centerRange.end - centerRange.start,
         chunk.right.end - chunk.right.start,
       );
-      const outerExtent = this.extentOf(outer, outerRange, maxLines);
-      const centerExtent = this.extentOf(center, centerRange, maxLines);
+      const outerExtent = shift(this.extentOf(outer, outerRange, maxLines), outerShift);
+      const centerExtent = shift(this.extentOf(center, centerRange, maxLines), centerShift);
 
       if (
         Math.max(outerExtent.bottom, centerExtent.bottom) < 0 ||
@@ -122,14 +145,18 @@ export class Connectors {
   }
 
   /**
-   * The WebStorm connector: an S-curved band from the chunk's block in the outer pane to
-   * its block (or zone span) in the result. Horizontal-tangent beziers give the smooth
-   * flow; equal extents flatten into a flush rectangle, differing ones do real bridging.
+   * The WebStorm/merge-studio ribbon: a flat rectangular shelf hugging the outer pane
+   * for the button zone — the »/× glyphs sit *on* the colour — then a smooth
+   * horizontal-tangent bend across the remaining width to the result's extent.
+   * Equal extents degenerate into a clean flush rectangle, which is the correct
+   * rendering for rows our alignment already made pixel-equal.
    */
   private band(chunk: Chunk, width: number, outer: PixelExtent, center: PixelExtent): SVGElement {
     const [xOuter, xCenter] = this.side === 'left' ? [0, width] : [width, 0];
-    const mid = width / 2;
-    // Degenerate spans (max 0 lines can't happen, but guard) keep a visible edge.
+    // Shelf covers the button zone; the bend gets the rest of the strip.
+    const xShelf = xOuter + (xCenter - xOuter) * 0.55;
+    const midBend = (xShelf + xCenter) / 2;
+    // Degenerate spans keep a visible edge to point at.
     const oBottom = Math.max(outer.bottom, outer.top + 1.5);
     const cBottom = Math.max(center.bottom, center.top + 1.5);
 
@@ -137,9 +164,11 @@ export class Connectors {
     path.setAttribute(
       'd',
       `M ${xOuter} ${outer.top} ` +
-        `C ${mid} ${outer.top} ${mid} ${center.top} ${xCenter} ${center.top} ` +
+        `L ${xShelf} ${outer.top} ` +
+        `C ${midBend} ${outer.top} ${midBend} ${center.top} ${xCenter} ${center.top} ` +
         `L ${xCenter} ${cBottom} ` +
-        `C ${mid} ${cBottom} ${mid} ${oBottom} ${xOuter} ${oBottom} Z`,
+        `C ${midBend} ${cBottom} ${midBend} ${oBottom} ${xShelf} ${oBottom} ` +
+        `L ${xOuter} ${oBottom} Z`,
     );
     const colors = COLORS[visualOf(chunk)];
     path.setAttribute('fill', colors.fill);
@@ -154,20 +183,23 @@ export class Connectors {
   private controlsFor(chunk: Chunk, top: number): HTMLElement[] {
     const row = document.createElement('div');
     row.className = `mf-chunk-controls mf-controls-${this.side}`;
-    // Sit the pair just inside the chunk's first row, WebStorm-style.
+    // Sit the pair on the band's shelf at the chunk's first row, WebStorm-style.
     row.style.top = `${Math.max(0, top + 1)}px`;
 
-    if (this.callbacks.canAccept(chunk, this.side)) {
-      // "»" pushes the left side into the result; "«" pulls the right side in.
-      row.append(
-        this.glyph(this.side === 'left' ? '»' : '«', 'Accept this change', () =>
+    // "»" pushes the left side into the result; "«" pulls the right side in.
+    const accept = this.callbacks.canAccept(chunk, this.side)
+      ? this.glyph(this.side === 'left' ? '»' : '«', 'Accept this change', () =>
           this.callbacks.onAccept(chunk.id, this.side),
-        ),
-      );
-    }
-    if (this.callbacks.canIgnore(chunk)) {
-      row.append(this.glyph('×', 'Ignore this change', () => this.callbacks.onIgnore(chunk.id)));
-    }
+        )
+      : null;
+    const ignore = this.callbacks.canIgnore(chunk)
+      ? this.glyph('×', 'Ignore this change', () => this.callbacks.onIgnore(chunk.id))
+      : null;
+
+    // The arrow always sits on the *inner* side (toward the result), × on the outer:
+    // left strip reads "× »", right strip reads "« ×" — matching WebStorm.
+    const ordered = this.side === 'left' ? [ignore, accept] : [accept, ignore];
+    row.append(...ordered.filter((glyph): glyph is HTMLElement => glyph !== null));
     return row.childElementCount > 0 ? [row] : [];
   }
 
