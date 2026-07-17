@@ -100,7 +100,11 @@ export class Connectors {
     return dom.getBoundingClientRect().top - this.svg.getBoundingClientRect().top;
   }
 
-  render(chunks: readonly Chunk[], centerRanges: ReadonlyMap<number, CenterRange>): void {
+  render(
+    chunks: readonly Chunk[],
+    centerRanges: ReadonlyMap<number, CenterRange>,
+    emphasis?: { currentChunkId?: number | undefined; flashChunkId?: number | undefined },
+  ): void {
     const outer = this.panes[this.side];
     const center = this.panes.center;
     const width = this.host.clientWidth;
@@ -138,7 +142,14 @@ export class Connectors {
         continue; // fully scrolled out of view
       }
 
-      shapes.push(this.band(chunk, width, outerExtent, centerExtent));
+      const band = this.band(chunk, width, outerExtent, centerExtent);
+      if (chunk.id === emphasis?.currentChunkId) {
+        band.classList.add('mf-band-current');
+      }
+      if (chunk.id === emphasis?.flashChunkId) {
+        band.classList.add('mf-band-flash');
+      }
+      shapes.push(band);
       controls.push(...this.controlsFor(chunk, outerExtent.top));
     }
 

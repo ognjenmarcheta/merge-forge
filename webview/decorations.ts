@@ -104,11 +104,18 @@ function decorationsFor(
  * The center pane is painted from live tracked ranges, not `chunk.base`, so highlights
  * follow the text after an accept or a manual edit.
  */
+/** Navigation emphasis: the persistent current chunk and the transient arrival flash. */
+export interface NavEmphasis {
+  currentChunkId?: number | undefined;
+  flashChunkId?: number | undefined;
+}
+
 export function renderDecorations(
   chunks: readonly Chunk[],
   centerRanges: ReadonlyMap<number, CenterRange>,
   collections: Record<PaneName, monaco.editor.IEditorDecorationsCollection>,
   wordRanges?: ReadonlyMap<number, ChunkWordRanges>,
+  emphasis?: NavEmphasis,
 ): void {
   const byPane: Record<PaneName, monaco.editor.IModelDeltaDecoration[]> = {
     left: [],
@@ -140,6 +147,25 @@ export function renderDecorations(
     }
   };
 
+  // Extra whole-line classes for one chunk across every pane it appears in.
+  const pushEmphasis = (
+    chunk: Chunk,
+    centerRange: CenterRange | undefined,
+    className: string,
+  ): void => {
+    const paint = (pane: PaneName, range: { start: number; end: number }) => {
+      const monacoRange = toMonacoRange(range);
+      if (monacoRange) {
+        byPane[pane].push({ range: monacoRange, options: { isWholeLine: true, className } });
+      }
+    };
+    paint('left', chunk.left);
+    paint('right', chunk.right);
+    if (centerRange) {
+      paint('center', centerRange);
+    }
+  };
+
   for (const chunk of chunks) {
     const leftKind = kindForSide(chunk, chunk.leftSubtype);
     if (leftKind) {
@@ -157,6 +183,12 @@ export function renderDecorations(
     const centerRange = centerRanges.get(chunk.id);
     if (centerRange) {
       byPane.center.push(...decorationsFor(centerRange, centerKind, chunk.state));
+    }
+    if (chunk.id === emphasis?.currentChunkId) {
+      pushEmphasis(chunk, centerRange, 'mf-current');
+    }
+    if (chunk.id === emphasis?.flashChunkId) {
+      pushEmphasis(chunk, centerRange, 'mf-flash');
     }
   }
 

@@ -412,3 +412,42 @@ button:disabled {
 .mf-done-action:hover {
   text-decoration: underline;
 }
+
+/* --- navigation feedback: arrival flash + current-chunk outline ------------- */
+
+@keyframes mf-flash {
+  0% {
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  100% {
+    background: rgba(255, 255, 255, 0);
+  }
+}
+
+.mf-flash {
+  animation: mf-flash 0.7s ease-out both;
+}
+
+.mf-current {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 3px 0 0 var(--vscode-focusBorder, #4daafc);
+}
+
+@keyframes mf-band-flash {
+  0% {
+    fill-opacity: 0.8;
+  }
+
+  100% {
+    fill-opacity: 0.3;
+  }
+}
+
+.mf-band-current {
+  stroke-width: 2;
+}
+
+.mf-band-flash {
+  animation: mf-band-flash 0.7s ease-out both;
+}

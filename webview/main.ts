@@ -55,10 +55,14 @@ interface Session {
   zoneIds: ReturnType<typeof emptyZoneIds>;
   toolbar: Toolbar;
   zone: Eol;
+  /** Navigation emphasis: the chunk you last jumped to, and the transient arrival flash. */
+  currentChunkId: number | undefined;
+  flashChunkId: number | undefined;
 }
 
 let session: Session | undefined;
 let cursor = -1;
+let flashTimer: number | undefined;
 
 /** Word-level emphasis per chunk, computed once — base and side texts never change. */
 function computeWordRanges(chunks: readonly Chunk[], payload: InitPayload) {
@@ -110,6 +114,7 @@ function refresh(): void {
     centerRanges,
     session.collections,
     session.highlight === 'words' ? session.wordRanges : undefined,
+    { currentChunkId: session.currentChunkId, flashChunkId: session.flashChunkId },
   );
   redrawConnectors();
   session.toolbar.update(chunks);
@@ -125,8 +130,12 @@ function redrawConnectors(): void {
     return;
   }
   const centerRanges = session.store.centerRanges();
-  session.connectors.left.render(session.chunks, centerRanges);
-  session.connectors.right.render(session.chunks, centerRanges);
+  const emphasis = {
+    currentChunkId: session.currentChunkId,
+    flashChunkId: session.flashChunkId,
+  };
+  session.connectors.left.render(session.chunks, centerRanges, emphasis);
+  session.connectors.right.render(session.chunks, centerRanges, emphasis);
 }
 
 function postState(): void {
@@ -160,10 +169,22 @@ function navigate(direction: 1 | -1): void {
     return;
   }
   const centerRange = store.centerRange(chunk.id);
-  panes.center.revealLineInCenter(centerRange.start + 1);
-  panes.left.revealLineInCenter(chunk.left.start + 1);
-  panes.right.revealLineInCenter(chunk.right.start + 1);
-  redrawConnectors();
+  // ScrollType.Smooth (0) lets the eye follow the jump; the arrival flash marks the
+  // destination, then the chunk keeps its "current" outline until the next jump.
+  const SMOOTH = 0;
+  panes.center.revealLineInCenter(centerRange.start + 1, SMOOTH);
+  panes.left.revealLineInCenter(chunk.left.start + 1, SMOOTH);
+  panes.right.revealLineInCenter(chunk.right.start + 1, SMOOTH);
+  session.currentChunkId = chunk.id;
+  session.flashChunkId = chunk.id;
+  window.clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => {
+    if (session) {
+      session.flashChunkId = undefined;
+      refresh();
+    }
+  }, 750);
+  refresh();
 }
 
 /**
@@ -230,6 +251,8 @@ function buildSession(whitespace: WhitespaceMode): void {
     () => refresh(),
   );
   cursor = -1;
+  session.currentChunkId = undefined;
+  session.flashChunkId = undefined;
   refresh();
 }
 
@@ -349,6 +372,8 @@ function start(payload: InitPayload): void {
     zoneIds: emptyZoneIds(),
     toolbar,
     zone: payload.eol.suggested,
+    currentChunkId: undefined,
+    flashChunkId: undefined,
   };
 
   syncScrolling(panes, redrawConnectors);
