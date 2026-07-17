@@ -1,3 +1,4 @@
+import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css';
 import './styles.css';
 import type {
   ConflictFileEntry,
@@ -57,6 +58,42 @@ function dirOf(path: string): string {
 
 function nameOf(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
+}
+
+/** Codicon name per file type — an approximation of VS Code's file icons. */
+const FILE_ICONS: Record<string, string> = {
+  ts: 'file-code',
+  tsx: 'file-code',
+  js: 'file-code',
+  jsx: 'file-code',
+  mjs: 'file-code',
+  cjs: 'file-code',
+  py: 'file-code',
+  go: 'file-code',
+  rs: 'file-code',
+  java: 'file-code',
+  json: 'json',
+  md: 'markdown',
+  vue: 'code',
+  html: 'code',
+  svelte: 'code',
+  xml: 'code',
+  css: 'symbol-color',
+  scss: 'symbol-color',
+  less: 'symbol-color',
+  png: 'file-media',
+  jpg: 'file-media',
+  jpeg: 'file-media',
+  gif: 'file-media',
+  svg: 'file-media',
+  webp: 'file-media',
+  ico: 'file-media',
+};
+
+function iconFor(path: string): string {
+  const name = nameOf(path);
+  const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
+  return FILE_ICONS[ext] ?? 'file';
 }
 
 /** Files in display order, honouring grouping — the order shift-selection ranges over. */
@@ -123,7 +160,10 @@ function fileRow(file: ConflictFileEntry, indent: boolean): HTMLElement {
     row.classList.add('cf-selected');
   }
   const name = element('span', `cf-name${indent ? ' cf-indent' : ''}`);
-  name.textContent = groupByDirectory ? nameOf(file.path) : file.path;
+  name.append(
+    element('span', `codicon codicon-${iconFor(file.path)} cf-file-icon`),
+    element('span', undefined, groupByDirectory ? nameOf(file.path) : file.path),
+  );
   name.title = file.path;
   row.append(name, statusCell(file.yours), statusCell(file.theirs));
   row.addEventListener('mousedown', (event) => select(file, event));

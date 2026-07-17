@@ -198,3 +198,42 @@ button:disabled {
   opacity: 0.75;
   font-size: 0.9em;
 }
+
+/* --- file-type icons -------------------------------------------------------- */
+
+/* Codicon content rules: Monaco injects these at runtime in the merge editor, but this
+   bundle has no Monaco — the handful of glyphs the dialog uses are declared here.
+   Codepoints come from monaco-editor's codiconsLibrary. */
+.codicon-file::before {
+  content: '\ea7b';
+}
+
+.codicon-file-code::before {
+  content: '\eae9';
+}
+
+.codicon-json::before {
+  content: '\eb0f';
+}
+
+.codicon-markdown::before {
+  content: '\eb1d';
+}
+
+.codicon-code::before {
+  content: '\eac4';
+}
+
+.codicon-symbol-color::before {
+  content: '\eb5c';
+}
+
+.codicon-file-media::before {
+  content: '\eaea';
+}
+
+.cf-file-icon {
+  flex-shrink: 0;
+  font-size: 14px !important;
+  opacity: 0.85;
+}

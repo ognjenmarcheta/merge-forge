@@ -54,6 +54,12 @@ const conflictsOptions = {
   platform: 'browser',
   format: 'iife',
   target: 'es2022',
+  // The dialog imports Monaco's codicon.css for the icon font (font only — the
+  // per-icon content rules it needs are its own, in styles.css).
+  loader: {
+    '.ttf': 'file',
+    '.css': 'css',
+  },
 };
 
 const allOptions = [extensionOptions, webviewOptions, workerOptions, conflictsOptions];

@@ -59,6 +59,8 @@ export function getConflictsHtml(webview: vscode.Webview, extensionUri: vscode.U
     `default-src 'none'`,
     `script-src 'nonce-${nonce}'`,
     `style-src ${webview.cspSource}`,
+    // The codicon file-type icons load their font from the bundled TTF.
+    `font-src ${webview.cspSource}`,
     `img-src ${webview.cspSource} data:`,
   ].join('; ');
 
