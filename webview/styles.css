@@ -451,3 +451,18 @@ button:disabled {
 .mf-band-flash {
   animation: mf-band-flash 0.7s ease-out both;
 }
+
+/* --- codicon sizing in our buttons ------------------------------------------ */
+
+.mf-toolbar button .codicon,
+.mf-chunk-glyph .codicon {
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.mf-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+}

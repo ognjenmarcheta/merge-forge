@@ -203,14 +203,19 @@ export class Connectors {
     const showAccept = this.side === 'left' ? offered.acceptLeft : offered.acceptRight;
     const showIgnore = this.side === 'left' ? offered.ignoreLeft : offered.ignoreRight;
 
-    // "»" pushes the left side into the result; "«" pulls the right side in.
+    // The chevron pushes/pulls that side into the result; Alt+arrow does the same for
+    // the current chunk.
     const accept = showAccept
-      ? this.glyph(this.side === 'left' ? '»' : '«', 'Accept this change', () =>
-          this.callbacks.onAccept(chunk.id, this.side),
+      ? this.glyph(
+          this.side === 'left' ? 'chevron-right' : 'chevron-left',
+          `Accept this change (Alt+${this.side === 'left' ? '←' : '→'})`,
+          () => this.callbacks.onAccept(chunk.id, this.side),
         )
       : null;
     const ignore = showIgnore
-      ? this.glyph('×', 'Ignore this change', () => this.callbacks.onDismiss(chunk.id, this.side))
+      ? this.glyph('close', 'Ignore this change', () =>
+          this.callbacks.onDismiss(chunk.id, this.side),
+        )
       : null;
 
     // The arrow always sits on the *inner* side (toward the result), × on the outer:
@@ -220,11 +225,14 @@ export class Connectors {
     return row.childElementCount > 0 ? [row] : [];
   }
 
-  private glyph(label: string, title: string, onClick: () => void): HTMLElement {
+  private glyph(codicon: string, title: string, onClick: () => void): HTMLElement {
     const button = document.createElement('button');
     button.className = 'mf-chunk-glyph';
-    button.textContent = label;
     button.title = title;
+    button.setAttribute('aria-label', title);
+    const icon = document.createElement('span');
+    icon.className = `codicon codicon-${codicon}`;
+    button.append(icon);
     button.addEventListener('click', onClick);
     return button;
   }

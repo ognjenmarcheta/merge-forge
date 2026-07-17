@@ -3,6 +3,10 @@ import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 // editor.main or the language services (ts/html/css/json workers): syntax
 // highlighting is all a merge tool needs, and this keeps the bundle a few MB smaller.
 import 'monaco-editor/esm/vs/basic-languages/monaco.contribution';
+// The codicon @font-face and per-icon glyph rules — our toolbar and chunk controls use
+// the same icon font as VS Code. Without this import the font never reaches the bundle
+// and every icon renders as tofu (found the hard way).
+import 'monaco-editor/esm/vs/base/browser/ui/codicons/codiconStyles.js';
 
 export { monaco };
 

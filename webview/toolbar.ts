@@ -32,6 +32,18 @@ function button(label: string, title: string, onClick: () => void, primary = fal
   return node;
 }
 
+/** An icon-bearing button using Monaco's bundled codicon font. */
+function iconButton(name: string, title: string, onClick: () => void): HTMLElement {
+  const node = document.createElement('button');
+  node.title = title;
+  node.setAttribute('aria-label', title);
+  const glyph = document.createElement('span');
+  glyph.className = `codicon codicon-${name}`;
+  node.append(glyph);
+  node.addEventListener('click', onClick);
+  return node;
+}
+
 function select<T extends string>(
   title: string,
   options: Array<[T, string]>,
@@ -67,19 +79,27 @@ export function buildToolbar(
   counter: HTMLElement,
   actions: ToolbarActions,
 ): Toolbar {
-  const previous = button('↑', 'Previous change (Shift+F7)', actions.previous);
-  const next = button('↓', 'Next change (F7)', actions.next);
+  const previous = iconButton('arrow-up', 'Previous change (Shift+F7)', actions.previous);
+  const next = iconButton('arrow-down', 'Next change (F7)', actions.next);
 
   const applyLabel = document.createElement('span');
   applyLabel.className = 'mf-toolbar-label';
   applyLabel.textContent = 'Apply non-conflicting changes:';
-  const fromLeft = button('⇥', 'Apply non-conflicting changes from the left side', () =>
-    actions.applyNonConflictingFrom('left'),
+  const fromLeft = iconButton(
+    'arrow-right',
+    'Apply non-conflicting changes from the left side',
+    () => actions.applyNonConflictingFrom('left'),
   );
-  const fromRight = button('⇤', 'Apply non-conflicting changes from the right side', () =>
-    actions.applyNonConflictingFrom('right'),
+  const fromRight = iconButton(
+    'arrow-left',
+    'Apply non-conflicting changes from the right side',
+    () => actions.applyNonConflictingFrom('right'),
   );
-  const applyAll = button('✦', 'Apply all non-conflicting changes', actions.applyAllNonConflicting);
+  const applyAll = iconButton(
+    'wand',
+    'Apply all non-conflicting changes',
+    actions.applyAllNonConflicting,
+  );
 
   const whitespace = select<WhitespaceMode>(
     'How whitespace differences are treated when comparing',
