@@ -5,9 +5,9 @@ import type { WhitespaceMode } from '../src/merge/engine';
 export type HighlightMode = 'words' | 'lines';
 
 export interface ToolbarActions {
+  /** Applies every non-conflicting change AND magic-resolves both-inserted conflicts. */
   applyAllNonConflicting: () => void;
   applyNonConflictingFrom: (side: 'left' | 'right') => void;
-  magicResolve: () => void;
   next: () => void;
   previous: () => void;
   setWhitespace: (mode: WhitespaceMode) => void;
@@ -79,11 +79,12 @@ export function buildToolbar(
   const fromRight = button('⇤', 'Apply non-conflicting changes from the right side', () =>
     actions.applyNonConflictingFrom('right'),
   );
-  const applyAll = button('⤢', 'Apply all non-conflicting changes', actions.applyAllNonConflicting);
-  const magic = button(
+  // One button does the whole safe sweep: every one-sided change, plus the "magic"
+  // conflicts where both sides simply added lines — hence the wand.
+  const applyAll = button(
     '✦',
-    'Magic Resolve — keep both sides where each simply added lines',
-    actions.magicResolve,
+    'Apply all non-conflicting changes (including simple conflicts where both sides added lines)',
+    actions.applyAllNonConflicting,
   );
 
   const whitespace = select<WhitespaceMode>(
@@ -113,7 +114,6 @@ export function buildToolbar(
     fromLeft,
     fromRight,
     applyAll,
-    magic,
     separator(),
     whitespace,
     highlight,
@@ -126,10 +126,9 @@ export function buildToolbar(
       const nonConflicting = pending.filter((c) => c.kind !== 'conflict').length;
       const conflicts = pending.filter((c) => c.kind === 'conflict').length;
 
-      applyAll.toggleAttribute('disabled', nonConflicting === 0);
+      applyAll.toggleAttribute('disabled', nonConflicting === 0 && !magicAvailable);
       fromLeft.toggleAttribute('disabled', nonConflicting === 0);
       fromRight.toggleAttribute('disabled', nonConflicting === 0);
-      magic.toggleAttribute('disabled', !magicAvailable);
       previous.toggleAttribute('disabled', chunks.length === 0);
       next.toggleAttribute('disabled', chunks.length === 0);
 

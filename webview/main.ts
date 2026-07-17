@@ -113,6 +113,10 @@ function refresh(): void {
   );
   redrawConnectors();
   session.toolbar.update(chunks, chunks.some(canMagicResolve));
+  // WebStorm's completion card: floats over the result once nothing needs deciding,
+  // and disappears again the moment any chunk reopens (e.g. via undo).
+  const allProcessed = chunks.length > 0 && chunks.every((c) => c.state !== 'initial');
+  session.layout.doneCard.classList.toggle('mf-hidden', !allProcessed);
   postState();
 }
 
@@ -162,6 +166,22 @@ function navigate(direction: 1 | -1): void {
   redrawConnectors();
 }
 
+/**
+ * The whole safe sweep: every change only one side made, plus the "magic" conflicts
+ * where both sides simply added lines (kept in left-then-right order). One button,
+ * because neither part ever needs a human decision.
+ */
+function applyAllSafe(): void {
+  if (!session) {
+    return;
+  }
+  session.store.applyMany((chunk) => nonConflictingAction(chunk));
+  session.store.applyMany((chunk) => (canMagicResolve(chunk) ? 'acceptLeft' : null));
+  session.store.applyMany((chunk) =>
+    chunk.bothInserted && chunk.state === 'appliedLeft' ? 'acceptRight' : null,
+  );
+}
+
 function runAction(action: MergeAction): void {
   if (!session) {
     return;
@@ -174,7 +194,7 @@ function runAction(action: MergeAction): void {
       navigate(-1);
       break;
     case 'applyAllNonConflicting':
-      session.store.applyMany((chunk) => nonConflictingAction(chunk));
+      applyAllSafe();
       break;
     case 'requestApply':
       requestApply();
@@ -293,15 +313,9 @@ function start(payload: InitPayload): void {
   };
 
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {
-    applyAllNonConflicting: () => session?.store.applyMany((chunk) => nonConflictingAction(chunk)),
+    applyAllNonConflicting: applyAllSafe,
     applyNonConflictingFrom: (side) =>
       session?.store.applyMany((chunk) => nonConflictingAction(chunk, side)),
-    magicResolve: () => {
-      session?.store.applyMany((chunk) => (canMagicResolve(chunk) ? 'acceptLeft' : null));
-      session?.store.applyMany((chunk) =>
-        chunk.bothInserted && chunk.state === 'appliedLeft' ? 'acceptRight' : null,
-      );
-    },
     next: () => navigate(1),
     previous: () => navigate(-1),
     setWhitespace: (mode) => void changeWhitespace(mode),
@@ -312,6 +326,7 @@ function start(payload: InitPayload): void {
       }
     },
   });
+  layout.doneAction.addEventListener('click', requestApply);
   buildFooter(layout.footer, {
     acceptLeft: () => session?.store.acceptAll('left', session.payload.left),
     acceptRight: () => session?.store.acceptAll('right', session.payload.right),

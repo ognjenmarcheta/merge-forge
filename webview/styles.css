@@ -374,3 +374,41 @@ button:disabled {
 .mf-edge-bottom.mf-edge-conf {
   border-bottom: 1px solid rgba(199, 84, 80, 0.75);
 }
+
+/* --- "all changes processed" completion card -------------------------------- */
+
+.mf-pane-center {
+  position: relative;
+}
+
+.mf-done-card {
+  display: flex;
+  position: absolute;
+  z-index: 10;
+  top: 40px;
+  left: 50%;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 22px;
+  transform: translateX(-50%);
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background, #252526);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  gap: 4px;
+}
+
+.mf-done-title {
+  color: var(--vscode-testing-iconPassed, #4ec94e);
+  font-weight: 600;
+}
+
+.mf-done-action {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  cursor: pointer;
+  font-size: 0.95em;
+}
+
+.mf-done-action:hover {
+  text-decoration: underline;
+}

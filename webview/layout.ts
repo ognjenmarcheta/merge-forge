@@ -12,6 +12,9 @@ export interface Layout {
   leftStrip: HTMLElement;
   rightStrip: HTMLElement;
   footer: HTMLElement;
+  /** Floating "all changes processed" card over the result pane. */
+  doneCard: HTMLElement;
+  doneAction: HTMLElement;
 }
 
 function element(tag: string, className: string, text?: string): HTMLElement {
@@ -51,6 +54,14 @@ export function buildLayout(
   const leftStrip = element('div', 'mf-strip');
   const rightStrip = element('div', 'mf-strip');
 
+  // WebStorm's completion indicator, floating over the result pane once nothing is left.
+  const doneCard = element('div', 'mf-done-card mf-hidden');
+  const doneTitle = element('div', 'mf-done-title', '✓ All changes have been processed');
+  const doneAction = element('a', 'mf-done-action', 'Save changes and finish merging');
+  doneCard.append(doneTitle, doneAction);
+  center.pane.classList.add('mf-pane-center');
+  center.pane.append(doneCard);
+
   panes.append(left.pane, leftStrip, center.pane, rightStrip, right.pane);
   root.replaceChildren(banner, confirmBar, toolbar, panes, footer);
 
@@ -64,5 +75,7 @@ export function buildLayout(
     leftStrip,
     rightStrip,
     footer,
+    doneCard,
+    doneAction,
   };
 }
