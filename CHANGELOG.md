@@ -70,3 +70,23 @@ AI conflict explanations and the remaining JetBrains-parity details:
   one, `·` where a chunk replaced the base text — JetBrains' dual margin.
 - **File-type icons** and full-path tooltips in the Conflicts dialog.
 - Requires VS Code/Cursor ≥ 1.90.
+
+## 0.4.0 — unreleased
+
+Multi-provider AI backends:
+
+- **"Explain conflicts with AI" now works with five backends**: Anthropic
+  (claude-opus-4-8), OpenAI (gpt-5.6-sol), DeepSeek (deepseek-v4-flash), Kimi/Moonshot
+  (kimi-k2.6), and any Custom OpenAI-compatible endpoint — OpenRouter, local Ollama
+  (`http://localhost:11434/v1`, no key needed), corporate proxies. The editor's own
+  Language Model API (VS Code + Copilot) is still tried first, zero-config.
+- **One guided command** — "Merge Forge: Set AI Provider & API Key" — picks the
+  provider, takes the key (stored per provider in SecretStorage), and activates it.
+  "Clear AI API Keys" removes stored keys selectively. An Anthropic key stored by
+  0.3.0 keeps working without reconfiguration.
+- `mergeForge.ai.model` now defaults to `"auto"` (the active provider's default;
+  any explicit value overrides). New: `mergeForge.ai.provider`,
+  `mergeForge.ai.customBaseUrl`, `mergeForge.ai.customModel`.
+- Streaming now runs on the Vercel AI SDK — one code path for every provider, with
+  the OpenAI-compatible protocol covered by a local stub test. Note: DeepSeek's old
+  `deepseek-chat` alias retires 2026-07-24; merge-forge uses the V4 IDs already.
