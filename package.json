@@ -183,11 +183,13 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.112.1",
+    "@ai-sdk/anthropic": "^4.0.16",
+    "@ai-sdk/openai-compatible": "^3.0.12",
     "@eslint/js": "^9.31.0",
     "@types/node": "^20.19.0",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.6.0",
+    "ai": "^7.0.31",
     "diff": "^9.0.0",
     "esbuild": "^0.25.5",
     "eslint": "^9.31.0",
