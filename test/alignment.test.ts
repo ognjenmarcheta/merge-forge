@@ -122,6 +122,37 @@ describe('computeSpacers — the alignment invariant', () => {
   });
 });
 
+describe('computeSpacers — gap tinting', () => {
+  test('padding for a chunk carries its colour family; stable gaps carry none', () => {
+    // Left adds two lines: center and right need padding tagged 'add'.
+    const base = lines('a', 'z');
+    const left = lines('a', 'L1', 'L2', 'z');
+    const chunks = computeChunks(base, left, base);
+    const segments = computeSegments(
+      chunks,
+      initialCenterRanges(chunks),
+      totalsFor(base, left, base),
+    );
+    const spacers = computeSpacers(segments);
+    expect(spacers.center.map((s) => s.visual)).toEqual(['add']);
+    expect(spacers.right.map((s) => s.visual)).toEqual(['add']);
+  });
+
+  test('conflict padding is tagged conf', () => {
+    const base = lines('a', 'b', 'z');
+    const left = lines('a', 'L1', 'L2', 'L3', 'z');
+    const right = lines('a', 'R', 'z');
+    const chunks = computeChunks(base, left, right);
+    const segments = computeSegments(
+      chunks,
+      initialCenterRanges(chunks),
+      totalsFor(base, left, right),
+    );
+    const spacers = computeSpacers(segments);
+    expect(spacers.right.every((s) => s.visual === 'conf')).toBe(true);
+  });
+});
+
 describe('computeSegments — center tracking', () => {
   test('a center pane that grew from edits still aligns', () => {
     const base = lines('a', 'b', 'z');

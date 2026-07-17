@@ -27,14 +27,18 @@ export function applySpacers(
       for (const id of zoneIds[name]) {
         accessor.removeZone(id);
       }
-      zoneIds[name] = spacers[name].map((spacer) =>
-        accessor.addZone({
+      zoneIds[name] = spacers[name].map((spacer) => {
+        // A tinted node makes the padding read as "this chunk's absent lines" rather
+        // than a broken void — the WebStorm treatment for alignment gaps.
+        const domNode = document.createElement('div');
+        domNode.className = spacer.visual ? `mf-zone mf-zone-${spacer.visual}` : 'mf-zone';
+        return accessor.addZone({
           // Monaco anchors after a 1-based line; 0 means "above the first line".
           afterLineNumber: spacer.afterLine,
           heightInLines: spacer.heightInLines,
-          domNode: document.createElement('div'),
-        }),
-      );
+          domNode,
+        });
+      });
     });
   }
 }

@@ -6,6 +6,23 @@ import type { PaneName } from './panes';
  * logic most likely to drift under editing, so it has to be testable without a browser.
  */
 
+/** The colour family a chunk paints with — drives gap tints as well as line fills. */
+export type ChunkVisual = 'mod' | 'add' | 'del' | 'conf';
+
+/** Reduces a chunk to its one visual family, for surfaces that show a single colour. */
+export function visualOf(chunk: Chunk): ChunkVisual {
+  if (chunk.kind === 'conflict') {
+    return 'conf';
+  }
+  if (chunk.leftSubtype === 'added' || chunk.rightSubtype === 'added') {
+    return 'add';
+  }
+  if (chunk.leftSubtype === 'deleted' || chunk.rightSubtype === 'deleted') {
+    return 'del';
+  }
+  return 'mod';
+}
+
 /** One aligned row: the same logical region, measured in each pane's own lines. */
 export interface Segment {
   left: number;
@@ -15,6 +32,8 @@ export interface Segment {
   startLeft: number;
   startCenter: number;
   startRight: number;
+  /** Set on chunk segments: what colour any padding for this row should carry. */
+  visual?: ChunkVisual;
 }
 
 /** Where a chunk currently sits in the center document. */
@@ -69,6 +88,7 @@ export function computeSegments(
       startLeft: chunk.left.start,
       startCenter: center.start,
       startRight: chunk.right.start,
+      visual: visualOf(chunk),
     });
     leftCursor = chunk.left.end;
     centerCursor = center.end;
@@ -93,6 +113,8 @@ export interface Spacer {
   /** 0-based line to insert after; Monaco reads this as its 1-based `afterLineNumber`. */
   afterLine: number;
   heightInLines: number;
+  /** Colour family of the chunk this padding stands in for; stable gaps carry none. */
+  visual?: ChunkVisual;
 }
 
 /**
@@ -112,7 +134,11 @@ export function computeSpacers(segments: readonly Segment[]): Record<PaneName, S
     for (const [pane, own, start] of rows) {
       const missing = tallest - own;
       if (missing > 0) {
-        spacers[pane].push({ afterLine: start + own, heightInLines: missing });
+        const spacer: Spacer = { afterLine: start + own, heightInLines: missing };
+        if (segment.visual) {
+          spacer.visual = segment.visual;
+        }
+        spacers[pane].push(spacer);
       }
     }
   }

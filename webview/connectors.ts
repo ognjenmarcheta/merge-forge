@@ -1,5 +1,6 @@
 import type { Chunk } from '../src/merge/chunk';
 import type { CenterRange } from './alignment';
+import { visualOf } from './alignment';
 import type { Panes } from './editors';
 import type { monaco } from './monaco';
 
@@ -15,23 +16,21 @@ export interface ConnectorCallbacks {
   canIgnore: (chunk: Chunk) => boolean;
 }
 
-function colorFor(chunk: Chunk): string {
-  switch (chunk.kind) {
-    case 'conflict':
-      return 'rgba(199, 84, 80, 0.35)';
-    case 'bothIdentical':
-      return 'rgba(98, 150, 85, 0.30)';
-    default:
-      return 'rgba(58, 121, 189, 0.30)';
-  }
-}
+/** Fill and edge colours per chunk family — the same palette the line fills use. */
+const COLORS: Record<ReturnType<typeof visualOf>, { fill: string; edge: string }> = {
+  conf: { fill: 'rgba(199, 84, 80, 0.30)', edge: 'rgba(199, 84, 80, 0.75)' },
+  add: { fill: 'rgba(98, 150, 85, 0.28)', edge: 'rgba(98, 150, 85, 0.75)' },
+  del: { fill: 'rgba(128, 128, 128, 0.25)', edge: 'rgba(128, 128, 128, 0.7)' },
+  mod: { fill: 'rgba(58, 121, 189, 0.26)', edge: 'rgba(58, 121, 189, 0.75)' },
+};
 
 /**
- * Draws the gutter strips between the panes: a filled shape linking each chunk's region
- * in the outer pane to its region in the result, plus its action buttons.
+ * Draws the gutter strips between the panes: an S-curved band linking each chunk's rows
+ * in the outer pane to its rows in the result (the WebStorm connector shape), plus the
+ * chunk's » « × controls at its first line.
  *
  * This is one plain DOM layer we own rather than a set of Monaco widgets. Widgets would
- * fight Monaco's own layout for position, and could not draw the connecting shapes at all.
+ * fight Monaco's own layout for position, and could not draw the connecting bands at all.
  */
 export class Connectors {
   private readonly svg: SVGSVGElement;
@@ -83,7 +82,7 @@ export class Connectors {
         continue; // fully scrolled out of view
       }
 
-      shapes.push(this.shape(chunk, width, oTop, oBottom, cTop, cBottom));
+      shapes.push(this.band(chunk, width, oTop, oBottom, cTop, cBottom));
       controls.push(...this.controlsFor(chunk, oTop));
     }
 
@@ -91,8 +90,12 @@ export class Connectors {
     this.buttons.replaceChildren(...controls);
   }
 
-  /** A band linking the chunk's rows in the outer pane to its rows in the result. */
-  private shape(
+  /**
+   * The WebStorm connector: an S-curved band from the chunk's rows in the outer pane to
+   * its rows in the result. Horizontal-tangent beziers give the smooth flow; a collapsed
+   * end (a pure insertion or deletion) narrows to a near-line pointing into the gap.
+   */
+  private band(
     chunk: Chunk,
     width: number,
     oTop: number,
@@ -101,45 +104,54 @@ export class Connectors {
     cBottom: number,
   ): SVGElement {
     const [xOuter, xCenter] = this.side === 'left' ? [0, width] : [width, 0];
+    const mid = width / 2;
+    // A zero-height side still needs a visible edge to point at.
+    const oB = Math.max(oBottom, oTop + 1.5);
+    const cB = Math.max(cBottom, cTop + 1.5);
+
     const path = document.createElementNS(SVG_NS, 'path');
-    // A zero-height side (a pure insertion) still needs a visible edge to point at.
-    const oB = Math.max(oBottom, oTop + 1);
-    const cB = Math.max(cBottom, cTop + 1);
     path.setAttribute(
       'd',
-      `M ${xOuter} ${oTop} L ${xCenter} ${cTop} L ${xCenter} ${cB} L ${xOuter} ${oB} Z`,
+      `M ${xOuter} ${oTop} ` +
+        `C ${mid} ${oTop} ${mid} ${cTop} ${xCenter} ${cTop} ` +
+        `L ${xCenter} ${cB} ` +
+        `C ${mid} ${cB} ${mid} ${oB} ${xOuter} ${oB} Z`,
     );
-    path.setAttribute('fill', colorFor(chunk));
+    const colors = COLORS[visualOf(chunk)];
+    path.setAttribute('fill', colors.fill);
+    path.setAttribute('stroke', colors.edge);
+    path.setAttribute('stroke-width', '1');
     if (chunk.state !== 'initial') {
-      path.setAttribute('opacity', '0.35');
+      path.setAttribute('opacity', '0.3');
     }
     return path;
   }
 
   private controlsFor(chunk: Chunk, top: number): HTMLElement[] {
-    const controls: HTMLElement[] = [];
+    const row = document.createElement('div');
+    row.className = `mf-chunk-controls mf-controls-${this.side}`;
+    // Sit the pair just inside the chunk's first row, WebStorm-style.
+    row.style.top = `${Math.max(0, top + 1)}px`;
+
     if (this.callbacks.canAccept(chunk, this.side)) {
-      // "»" pushes the left side rightwards into the result; "«" pulls the right side in.
-      controls.push(
-        this.button(this.side === 'left' ? '»' : '«', top, `Accept this change`, () =>
+      // "»" pushes the left side into the result; "«" pulls the right side in.
+      row.append(
+        this.glyph(this.side === 'left' ? '»' : '«', 'Accept this change', () =>
           this.callbacks.onAccept(chunk.id, this.side),
         ),
       );
     }
     if (this.callbacks.canIgnore(chunk)) {
-      controls.push(
-        this.button('×', top + 16, 'Ignore this change', () => this.callbacks.onIgnore(chunk.id)),
-      );
+      row.append(this.glyph('×', 'Ignore this change', () => this.callbacks.onIgnore(chunk.id)));
     }
-    return controls;
+    return row.childElementCount > 0 ? [row] : [];
   }
 
-  private button(label: string, top: number, title: string, onClick: () => void): HTMLElement {
+  private glyph(label: string, title: string, onClick: () => void): HTMLElement {
     const button = document.createElement('button');
-    button.className = 'mf-chunk-button';
+    button.className = 'mf-chunk-glyph';
     button.textContent = label;
     button.title = title;
-    button.style.top = `${top}px`;
     button.addEventListener('click', onClick);
     return button;
   }

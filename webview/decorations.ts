@@ -54,23 +54,48 @@ function toMonacoRange(range: { start: number; end: number }): monaco.IRange | n
   };
 }
 
-function decorationFor(
+/** Overview-ruler stripe colours per kind — the WebStorm scrollbar marks. */
+const RULER_COLORS: Record<'mod' | 'add' | 'del' | 'conf', string> = {
+  mod: 'rgba(58, 121, 189, 0.9)',
+  add: 'rgba(98, 150, 85, 0.9)',
+  del: 'rgba(128, 128, 128, 0.9)',
+  conf: 'rgba(199, 84, 80, 0.95)',
+};
+
+// monaco.editor.OverviewRulerLane.Full — inlined so this module stays type-only on monaco.
+const RULER_LANE_FULL = 7;
+
+/**
+ * The fill, ruler mark, and 1px top/bottom edges for one chunk range. The edges need
+ * their own single-line decorations: a border on the range's class would draw on *every*
+ * line of a multi-line chunk, not just its first and last.
+ */
+function decorationsFor(
   range: { start: number; end: number },
   kind: 'mod' | 'add' | 'del' | 'conf',
   state: ChunkState,
-): monaco.editor.IModelDeltaDecoration | null {
+): monaco.editor.IModelDeltaDecoration[] {
   const monacoRange = toMonacoRange(range);
   if (!monacoRange) {
-    return null;
+    return [];
   }
-  return {
-    range: monacoRange,
-    options: {
-      isWholeLine: true,
-      className: classesFor(kind, state).join(' '),
-      linesDecorationsClassName: `mf-stripe mf-stripe-${kind}`,
+  const line = (lineNumber: number, className: string): monaco.editor.IModelDeltaDecoration => ({
+    range: { startLineNumber: lineNumber, startColumn: 1, endLineNumber: lineNumber, endColumn: 1 },
+    options: { isWholeLine: true, className },
+  });
+  return [
+    {
+      range: monacoRange,
+      options: {
+        isWholeLine: true,
+        className: classesFor(kind, state).join(' '),
+        linesDecorationsClassName: `mf-stripe mf-stripe-${kind}`,
+        overviewRuler: { color: RULER_COLORS[kind], position: RULER_LANE_FULL },
+      },
     },
-  };
+    line(monacoRange.startLineNumber, `mf-edge-top mf-edge-${kind}`),
+    line(monacoRange.endLineNumber, `mf-edge-bottom mf-edge-${kind}`),
+  ];
 }
 
 /**
@@ -118,17 +143,11 @@ export function renderDecorations(
   for (const chunk of chunks) {
     const leftKind = kindForSide(chunk, chunk.leftSubtype);
     if (leftKind) {
-      const decoration = decorationFor(chunk.left, leftKind, chunk.state);
-      if (decoration) {
-        byPane.left.push(decoration);
-      }
+      byPane.left.push(...decorationsFor(chunk.left, leftKind, chunk.state));
     }
     const rightKind = kindForSide(chunk, chunk.rightSubtype);
     if (rightKind) {
-      const decoration = decorationFor(chunk.right, rightKind, chunk.state);
-      if (decoration) {
-        byPane.right.push(decoration);
-      }
+      byPane.right.push(...decorationsFor(chunk.right, rightKind, chunk.state));
     }
     const words = wordRanges?.get(chunk.id);
     pushWords('left', chunk, words?.left);
@@ -137,10 +156,7 @@ export function renderDecorations(
     const centerKind = chunk.kind === 'conflict' ? 'conf' : 'mod';
     const centerRange = centerRanges.get(chunk.id);
     if (centerRange) {
-      const decoration = decorationFor(centerRange, centerKind, chunk.state);
-      if (decoration) {
-        byPane.center.push(decoration);
-      }
+      byPane.center.push(...decorationsFor(centerRange, centerKind, chunk.state));
     }
   }
 

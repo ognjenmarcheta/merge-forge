@@ -124,7 +124,7 @@ button:disabled {
 
 .mf-strip {
   position: relative;
-  flex: 0 0 30px;
+  flex: 0 0 36px;
   overflow: hidden;
   border-left: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   border-right: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
@@ -179,14 +179,26 @@ button:disabled {
   background: rgba(199, 84, 80, 0.95);
 }
 
-/* Applied/ignored chunks fade out; ignored is struck through. */
-.mf-resolved {
-  opacity: 0.4;
+/* Resolved chunks dim only their fill — the code stays fully readable (WebStorm). */
+.mf-mod.mf-resolved {
+  background: rgba(58, 121, 189, 0.1);
 }
 
+.mf-add.mf-resolved {
+  background: rgba(98, 150, 85, 0.1);
+}
+
+.mf-del.mf-resolved {
+  background: rgba(128, 128, 128, 0.09);
+}
+
+.mf-conf.mf-resolved {
+  background: rgba(199, 84, 80, 0.11);
+}
+
+/* Ignored = deliberately took neither side: neutral grey fill, no strike-through. */
 .mf-ignored {
-  text-decoration: line-through;
-  opacity: 0.45;
+  background: rgba(128, 128, 128, 0.12) !important;
 }
 
 /* --- chunk action buttons in the gutter strips ---------------------------- */
@@ -197,27 +209,42 @@ button:disabled {
   pointer-events: none;
 }
 
-.mf-chunk-button {
+/* WebStorm-style controls: a horizontal glyph pair at the chunk's first line. */
+.mf-chunk-controls {
+  display: flex;
   position: absolute;
-  left: 50%;
-  width: 16px;
-  height: 14px;
-  padding: 0;
-  transform: translateX(-50%);
-  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.4));
-  border-radius: 2px;
-  background: var(--vscode-editor-background);
-  color: var(--vscode-foreground);
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.65;
+  gap: 1px;
+  align-items: center;
+  height: 16px;
   pointer-events: auto;
 }
 
-.mf-chunk-button:hover {
-  border-color: var(--vscode-focusBorder, #0078d4);
-  background: var(--vscode-button-background, #0e639c);
-  color: var(--vscode-button-foreground, #fff);
+.mf-controls-left {
+  right: 1px;
+}
+
+.mf-controls-right {
+  left: 1px;
+}
+
+.mf-chunk-glyph {
+  width: 15px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+.mf-chunk-glyph:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.25));
+  color: var(--vscode-focusBorder, #4daafc);
   opacity: 1;
 }
 
@@ -270,4 +297,80 @@ button:disabled {
 
 .mf-banner button {
   margin-left: 6px;
+}
+
+/* --- tinted alignment gaps (a chunk's absent lines, not a void) ------------- */
+
+.mf-zone-mod {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(58, 121, 189, 0.12),
+    rgba(58, 121, 189, 0.12) 4px,
+    rgba(58, 121, 189, 0.05) 4px,
+    rgba(58, 121, 189, 0.05) 8px
+  );
+}
+
+.mf-zone-add {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(98, 150, 85, 0.12),
+    rgba(98, 150, 85, 0.12) 4px,
+    rgba(98, 150, 85, 0.05) 4px,
+    rgba(98, 150, 85, 0.05) 8px
+  );
+}
+
+.mf-zone-del {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(128, 128, 128, 0.12),
+    rgba(128, 128, 128, 0.12) 4px,
+    rgba(128, 128, 128, 0.05) 4px,
+    rgba(128, 128, 128, 0.05) 8px
+  );
+}
+
+.mf-zone-conf {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(199, 84, 80, 0.13),
+    rgba(199, 84, 80, 0.13) 4px,
+    rgba(199, 84, 80, 0.05) 4px,
+    rgba(199, 84, 80, 0.05) 8px
+  );
+}
+
+/* --- 1px chunk block edges (WebStorm) --------------------------------------- */
+
+.mf-edge-top.mf-edge-mod {
+  border-top: 1px solid rgba(58, 121, 189, 0.7);
+}
+
+.mf-edge-bottom.mf-edge-mod {
+  border-bottom: 1px solid rgba(58, 121, 189, 0.7);
+}
+
+.mf-edge-top.mf-edge-add {
+  border-top: 1px solid rgba(98, 150, 85, 0.7);
+}
+
+.mf-edge-bottom.mf-edge-add {
+  border-bottom: 1px solid rgba(98, 150, 85, 0.7);
+}
+
+.mf-edge-top.mf-edge-del {
+  border-top: 1px solid rgba(128, 128, 128, 0.65);
+}
+
+.mf-edge-bottom.mf-edge-del {
+  border-bottom: 1px solid rgba(128, 128, 128, 0.65);
+}
+
+.mf-edge-top.mf-edge-conf {
+  border-top: 1px solid rgba(199, 84, 80, 0.75);
+}
+
+.mf-edge-bottom.mf-edge-conf {
+  border-bottom: 1px solid rgba(199, 84, 80, 0.75);
 }

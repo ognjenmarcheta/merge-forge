@@ -24,7 +24,10 @@ function paneOptions(readOnly: boolean): monaco.editor.IStandaloneEditorConstruc
     minimap: { enabled: false },
     lineNumbersMinChars: 3,
     glyphMargin: false,
-    overviewRulerLanes: 0,
+    // Chunk decorations paint scrollbar marks (WebStorm's right-edge stripes).
+    overviewRulerLanes: 2,
+    overviewRulerBorder: false,
+    hideCursorInOverviewRuler: true,
     scrollbar: {
       // Only the center pane shows a vertical scrollbar; all three scroll together.
       vertical: readOnly ? 'hidden' : 'auto',
