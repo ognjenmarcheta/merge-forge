@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildExplainPrompt, SIDE_TEXT_CAP } from '../src/ai/prompt';
+import { buildExplainPrompt, buildResolvePrompt, SIDE_TEXT_CAP } from '../src/ai/prompt';
 import type { ExplainRequest } from '../src/protocol';
 
 function request(overrides: Partial<ExplainRequest> = {}): ExplainRequest {
@@ -83,5 +83,40 @@ describe('buildExplainPrompt', () => {
       request({ conflicts: [{ index: 1, baseText: 'gone\n', leftText: '', rightText: 'kept\n' }] }),
     );
     expect(user).toContain('(no lines — deleted)');
+  });
+});
+
+describe('buildResolvePrompt', () => {
+  test('system prompt demands the delimiter protocol and nothing else', () => {
+    const { system } = buildResolvePrompt(request());
+    expect(system).toContain('<<<RESOLVED');
+    expect(system).toContain('<<<END');
+    expect(system.toLowerCase()).toContain('only');
+  });
+
+  test('user prompt carries the conflicts and the expected block count', () => {
+    const { user } = buildResolvePrompt(
+      request({
+        conflicts: [
+          { index: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
+          { index: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
+        ],
+      }),
+    );
+    expect(user).toContain('## Conflict 1');
+    expect(user).toContain('## Conflict 2');
+    expect(user).toContain('exactly 2');
+    expect(user).toContain('<<<RESOLVED 1>>>');
+  });
+
+  test('a prior explanation is included as context when provided', () => {
+    const { user } = buildResolvePrompt(request(), '### Conflict 1\nTake theirs.');
+    expect(user).toContain('Earlier analysis');
+    expect(user).toContain('Take theirs.');
+  });
+
+  test('without an explanation there is no analysis section', () => {
+    const { user } = buildResolvePrompt(request());
+    expect(user).not.toContain('Earlier analysis');
   });
 });

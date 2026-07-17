@@ -26,11 +26,8 @@ function fence(text: string): string {
   return `\`\`\`\n${body}\`\`\``;
 }
 
-/**
- * Builds the system/user prompt pair for a whole-file conflict explanation.
- * Pure and side-effect free so it can be unit-tested; providers own the transport.
- */
-export function buildExplainPrompt(request: ExplainRequest): { system: string; user: string } {
+/** The shared header + per-conflict BASE/YOURS/THEIRS sections. */
+function conflictSections(request: ExplainRequest): string[] {
   const lines: string[] = [
     `File: \`${request.filePath}\` (language: ${request.languageId})`,
     `Merging **${request.labels.right}** (theirs) into **${request.labels.left}** (yours).`,
@@ -54,10 +51,58 @@ export function buildExplainPrompt(request: ExplainRequest): { system: string; u
       '',
     );
   }
+  return lines;
+}
+
+/**
+ * Builds the system/user prompt pair for a whole-file conflict explanation.
+ * Pure and side-effect free so it can be unit-tested; providers own the transport.
+ */
+export function buildExplainPrompt(request: ExplainRequest): { system: string; user: string } {
+  const lines = conflictSections(request);
   // The explicit count keeps a model from quietly stopping after the first section.
   lines.push(
     `Your answer must contain exactly ${request.conflicts.length} "### Conflict" sections — ` +
       'one per conflict above, in order.',
   );
   return { system: SYSTEM_PROMPT, user: lines.join('\n') };
+}
+
+const RESOLVE_SYSTEM_PROMPT = `You are an expert Git merge resolver. For each conflict you receive the
+common ancestor (BASE) and the two branch versions; your job is to produce the merged code a careful
+engineer would write — combining compatible changes, choosing the better implementation when they
+genuinely collide, and never dropping work from either side without reason.
+
+Output format — this is machine-parsed, follow it exactly:
+For each conflict N, output ONLY:
+<<<RESOLVED N>>>
+<the complete merged replacement for that conflict region>
+<<<END N>>>
+
+Rules:
+- The content between the markers replaces the conflict region verbatim: real code only —
+  no conflict markers, no markdown fences, no commentary, no explanations.
+- Preserve the file's existing indentation and style.
+- An intentionally empty region (both sides should be dropped) is an empty block.
+- Do not output anything outside the blocks.`;
+
+/**
+ * The resolution counterpart of the explain prompt: same conflict sections, but the
+ * answer is the machine-parsed delimiter protocol (see `resolveParser.ts`). A prior
+ * explanation, when present, is included so the merge matches what was suggested.
+ */
+export function buildResolvePrompt(
+  request: ExplainRequest,
+  explanation?: string,
+): { system: string; user: string } {
+  const lines = conflictSections(request);
+  if (explanation && explanation.trim() !== '') {
+    lines.push('Earlier analysis of these conflicts (follow its suggestions):', '', explanation, '');
+  }
+  const count = request.conflicts.length;
+  lines.push(
+    `Output exactly ${count} block${count === 1 ? '' : 's'}, one per conflict above, in order:`,
+    ...request.conflicts.map((c) => `<<<RESOLVED ${c.index}>>> … <<<END ${c.index}>>>`),
+  );
+  return { system: RESOLVE_SYSTEM_PROMPT, user: lines.join('\n') };
 }
