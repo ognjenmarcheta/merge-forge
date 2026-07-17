@@ -2,9 +2,13 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { APICallError, streamText, type LanguageModel } from 'ai';
 import * as vscode from 'vscode';
-import type { ExplainRequest } from '../protocol';
-import { buildExplainPrompt } from './prompt';
 import { providerById, resolveModel, type ProviderSpec } from './providers';
+
+/** A ready-to-send prompt; built by the callers (explain vs resolve) in prompt.ts. */
+export interface PromptPair {
+  system: string;
+  user: string;
+}
 
 /** Legacy secret name from the Anthropic-only release; still read as a fallback. */
 export const API_KEY_SECRET = 'mergeForge.anthropicKey';
@@ -24,8 +28,8 @@ export interface ExplainCallbacks {
 export type ExplainProvider =
   | {
       kind: 'vscode-lm' | 'api';
-      explain(
-        request: ExplainRequest,
+      stream(
+        prompt: PromptPair,
         callbacks: ExplainCallbacks,
         token: vscode.CancellationToken,
       ): Promise<void>;
@@ -45,7 +49,7 @@ export async function getExplainProvider(
   if (lmModel) {
     return {
       kind: 'vscode-lm',
-      explain: (req, cb, token) => explainViaLm(lmModel, req, cb, token),
+      stream: (prompt, cb, token) => streamViaLm(lmModel, prompt, cb, token),
     };
   }
   const configured = await configureApiModel(context);
@@ -54,8 +58,8 @@ export async function getExplainProvider(
   }
   return {
     kind: 'api',
-    explain: (req, cb, token) =>
-      explainViaAiSdk(configured.model, configured.label, req, cb, token),
+    stream: (prompt, cb, token) =>
+      streamViaAiSdk(configured.model, configured.label, prompt, cb, token),
   };
 }
 
@@ -123,13 +127,12 @@ async function findLanguageModel(): Promise<vscode.LanguageModelChat | undefined
   }
 }
 
-async function explainViaLm(
+async function streamViaLm(
   model: vscode.LanguageModelChat,
-  request: ExplainRequest,
+  { system, user }: PromptPair,
   callbacks: ExplainCallbacks,
   token: vscode.CancellationToken,
 ): Promise<void> {
-  const { system, user } = buildExplainPrompt(request);
   try {
     // The LM API has no system role at our floor version; prepend it to the user turn.
     const response = await model.sendRequest(
@@ -157,14 +160,13 @@ async function explainViaLm(
 }
 
 /** One streaming path for every API-key provider, via the AI SDK. */
-export async function explainViaAiSdk(
+export async function streamViaAiSdk(
   model: LanguageModel,
   providerLabel: string,
-  request: ExplainRequest,
+  { system, user }: PromptPair,
   callbacks: ExplainCallbacks,
   token: vscode.CancellationToken,
 ): Promise<void> {
-  const { system, user } = buildExplainPrompt(request);
   const controller = new AbortController();
   const cancellation = token.onCancellationRequested(() => controller.abort());
   let failed = false;

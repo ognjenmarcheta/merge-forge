@@ -305,6 +305,7 @@ function requestExplain(): void {
       const texts = chunkTexts(chunk, payload.base, payload.left, payload.right);
       return {
         index: position + 1,
+        chunkId: chunk.id,
         baseText: texts.base.join(''),
         leftText: texts.left.join(''),
         rightText: texts.right.join(''),

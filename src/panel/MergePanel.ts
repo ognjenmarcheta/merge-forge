@@ -1,6 +1,8 @@
 import { relative } from 'node:path';
 import * as vscode from 'vscode';
-import { getExplainProvider } from '../ai/provider';
+import { buildExplainPrompt, buildResolvePrompt } from '../ai/prompt';
+import { getExplainProvider, type ExplainProvider } from '../ai/provider';
+import { parseResolutions } from '../ai/resolveParser';
 import { applyResolved } from '../git/applyResult';
 import { listConflicted } from '../git/conflicts';
 import { loadMergeInputs, type UnsupportedReason } from '../git/loadMerge';
@@ -144,6 +146,9 @@ export class MergePanel {
       case 'explain':
         void this.explain(message.payload);
         break;
+      case 'aiResolve':
+        void this.aiResolve(message.payload.request, message.payload.explanation);
+        break;
       case 'explainCancel':
         this.cancelExplain();
         break;
@@ -155,6 +160,66 @@ export class MergePanel {
 
   /** Streams an AI explanation of the file's conflicts back into the webview drawer. */
   private async explain(request: ExplainRequest): Promise<void> {
+    const started = await this.startAiRequest();
+    if (!started) {
+      return;
+    }
+    await started.provider.stream(
+      buildExplainPrompt(request),
+      {
+        onDelta: (text) => this.post({ type: 'explainDelta', text }),
+        onDone: (truncated) =>
+          this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
+        onError: (message) => this.post({ type: 'explainError', message }),
+      },
+      started.token,
+    );
+  }
+
+  /**
+   * "Resolve with AI": one request returns machine-parsed merged blocks; only what
+   * parses is sent back — a skipped or garbled block just leaves that conflict open.
+   */
+  private async aiResolve(request: ExplainRequest, explanation?: string): Promise<void> {
+    const started = await this.startAiRequest();
+    if (!started) {
+      return;
+    }
+    let accumulated = '';
+    await started.provider.stream(
+      buildResolvePrompt(request, explanation),
+      {
+        onDelta: (text) => {
+          accumulated += text;
+        },
+        onDone: () => {
+          const byIndex = parseResolutions(
+            accumulated,
+            request.conflicts.map((c) => c.index),
+          );
+          const resolutions = request.conflicts
+            .filter((c) => byIndex.has(c.index))
+            .map((c) => ({ chunkId: c.chunkId, text: byIndex.get(c.index)! }));
+          this.post({
+            type: 'aiResolutions',
+            resolutions,
+            missing: request.conflicts.length - resolutions.length,
+          });
+        },
+        onError: (message) => this.post({ type: 'explainError', message }),
+      },
+      started.token,
+    );
+  }
+
+  /** Shared preamble: cancel any in-flight request, resolve the backend, or report setup. */
+  private async startAiRequest(): Promise<
+    | {
+        provider: Exclude<ExplainProvider, { kind: 'unconfigured' }>;
+        token: vscode.CancellationToken;
+      }
+    | undefined
+  > {
     this.cancelExplain();
     const cancellation = new vscode.CancellationTokenSource();
     this.explainCancellation = cancellation;
@@ -165,21 +230,12 @@ export class MergePanel {
         message: 'No AI backend is configured.',
         unconfigured: true,
       });
-      return;
+      return undefined;
     }
     if (cancellation.token.isCancellationRequested) {
-      return;
+      return undefined;
     }
-    await provider.explain(
-      request,
-      {
-        onDelta: (text) => this.post({ type: 'explainDelta', text }),
-        onDone: (truncated) =>
-          this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
-        onError: (message) => this.post({ type: 'explainError', message }),
-      },
-      cancellation.token,
-    );
+    return { provider, token: cancellation.token };
   }
 
   private cancelExplain(): void {

@@ -97,7 +97,12 @@ export function buildResolvePrompt(
 ): { system: string; user: string } {
   const lines = conflictSections(request);
   if (explanation && explanation.trim() !== '') {
-    lines.push('Earlier analysis of these conflicts (follow its suggestions):', '', explanation, '');
+    lines.push(
+      'Earlier analysis of these conflicts (follow its suggestions):',
+      '',
+      explanation,
+      '',
+    );
   }
   const count = request.conflicts.length;
   lines.push(

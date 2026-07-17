@@ -36,6 +36,8 @@ export type MergeAction = 'nextChange' | 'prevChange' | 'applyAllNonConflicting'
 export interface ExplainConflict {
   /** 1-based position among the file's conflicts, for "Conflict N" headings. */
   index: number;
+  /** The webview's chunk id, echoed back so resolutions land on the right chunk. */
+  chunkId: number;
   baseText: string;
   leftText: string;
   rightText: string;
@@ -54,7 +56,13 @@ export type HostToWebviewMessage =
   | { type: 'applyResult'; ok: boolean; error?: string }
   | { type: 'explainDelta'; text: string }
   | { type: 'explainDone'; truncated?: boolean }
-  | { type: 'explainError'; message: string; unconfigured?: boolean };
+  | { type: 'explainError'; message: string; unconfigured?: boolean }
+  | {
+      type: 'aiResolutions';
+      resolutions: Array<{ chunkId: number; text: string }>;
+      /** Conflicts the model skipped or answered unparseably — they stay open. */
+      missing: number;
+    };
 
 export interface StatePayload {
   totalChunks: number;
@@ -71,6 +79,7 @@ export type WebviewToHostMessage =
   | { type: 'apply'; payload: { content: string; eol: Eol } }
   | { type: 'abort' }
   | { type: 'explain'; payload: ExplainRequest }
+  | { type: 'aiResolve'; payload: { request: ExplainRequest; explanation?: string } }
   | { type: 'explainCancel' }
   | { type: 'openAiSetup' }
   | { type: 'log'; level: 'warn' | 'error'; message: string };

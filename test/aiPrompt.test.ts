@@ -10,6 +10,7 @@ function request(overrides: Partial<ExplainRequest> = {}): ExplainRequest {
     conflicts: [
       {
         index: 1,
+        chunkId: 0,
         baseText: 'const a = 1;\n',
         leftText: 'const a = 2;\n',
         rightText: 'const a = 3;\n',
@@ -32,8 +33,8 @@ describe('buildExplainPrompt', () => {
     const { user } = buildExplainPrompt(
       request({
         conflicts: [
-          { index: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
-          { index: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
+          { index: 1, chunkId: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
+          { index: 2, chunkId: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
         ],
       }),
     );
@@ -58,9 +59,9 @@ describe('buildExplainPrompt', () => {
     const { user } = buildExplainPrompt(
       request({
         conflicts: [
-          { index: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
-          { index: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
-          { index: 3, baseText: 'three\n', leftText: 'tres\n', rightText: 'drei\n' },
+          { index: 1, chunkId: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
+          { index: 2, chunkId: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
+          { index: 3, chunkId: 3, baseText: 'three\n', leftText: 'tres\n', rightText: 'drei\n' },
         ],
       }),
     );
@@ -72,7 +73,9 @@ describe('buildExplainPrompt', () => {
   test('long sides are truncated at the cap with a marker', () => {
     const long = 'x'.repeat(SIDE_TEXT_CAP + 500);
     const { user } = buildExplainPrompt(
-      request({ conflicts: [{ index: 1, baseText: '', leftText: long, rightText: 'ok\n' }] }),
+      request({
+        conflicts: [{ index: 1, chunkId: 1, baseText: '', leftText: long, rightText: 'ok\n' }],
+      }),
     );
     expect(user).toContain('…truncated…');
     expect(user).not.toContain('x'.repeat(SIDE_TEXT_CAP + 1));
@@ -80,7 +83,11 @@ describe('buildExplainPrompt', () => {
 
   test('an empty side is rendered as deleted, not as an empty block', () => {
     const { user } = buildExplainPrompt(
-      request({ conflicts: [{ index: 1, baseText: 'gone\n', leftText: '', rightText: 'kept\n' }] }),
+      request({
+        conflicts: [
+          { index: 1, chunkId: 1, baseText: 'gone\n', leftText: '', rightText: 'kept\n' },
+        ],
+      }),
     );
     expect(user).toContain('(no lines — deleted)');
   });
@@ -98,8 +105,8 @@ describe('buildResolvePrompt', () => {
     const { user } = buildResolvePrompt(
       request({
         conflicts: [
-          { index: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
-          { index: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
+          { index: 1, chunkId: 1, baseText: 'one\n', leftText: 'uno\n', rightText: 'eins\n' },
+          { index: 2, chunkId: 2, baseText: 'two\n', leftText: 'dos\n', rightText: 'zwei\n' },
         ],
       }),
     );

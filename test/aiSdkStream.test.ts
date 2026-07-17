@@ -7,7 +7,9 @@ import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 // so a bare stub is enough to load the module outside an extension host.
 vi.mock('vscode', () => ({}));
 
-import { explainViaAiSdk, type ExplainCallbacks } from '../src/ai/provider';
+import { buildExplainPrompt, buildResolvePrompt } from '../src/ai/prompt';
+import { streamViaAiSdk, type ExplainCallbacks } from '../src/ai/provider';
+import { parseResolutions } from '../src/ai/resolveParser';
 import type { ExplainRequest } from '../src/protocol';
 
 /**
@@ -40,6 +42,7 @@ beforeAll(async () => {
         return;
       }
       const wantsTruncation = body.includes('"model":"truncating-model"');
+      const wantsResolution = body.includes('"model":"resolve-model"');
       res.writeHead(200, {
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache',
@@ -50,13 +53,23 @@ beforeAll(async () => {
         created: 1,
         model: 'stub',
       };
-      const chunks = wantsTruncation
-        ? SSE_CHUNKS.map((chunk) =>
-            chunk.choices[0]?.finish_reason === 'stop'
-              ? { choices: [{ index: 0, delta: {}, finish_reason: 'length' }] }
-              : chunk,
-          )
-        : SSE_CHUNKS;
+      const chunks = wantsResolution
+        ? [
+            {
+              choices: [
+                { index: 0, delta: { role: 'assistant', content: '<<<RESOLVED 1>>>\nmer' } },
+              ],
+            },
+            { choices: [{ index: 0, delta: { content: 'ged();\n<<<END 1>>>' } }] },
+            { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+          ]
+        : wantsTruncation
+          ? SSE_CHUNKS.map((chunk) =>
+              chunk.choices[0]?.finish_reason === 'stop'
+                ? { choices: [{ index: 0, delta: {}, finish_reason: 'length' }] }
+                : chunk,
+            )
+          : SSE_CHUNKS;
       for (const chunk of chunks) {
         res.write(`data: ${JSON.stringify({ ...common, ...chunk })}\n\n`);
       }
@@ -76,7 +89,7 @@ const request: ExplainRequest = {
   filePath: 'src/a.ts',
   languageId: 'typescript',
   labels: { left: 'feature', right: 'main' },
-  conflicts: [{ index: 1, baseText: 'a\n', leftText: 'b\n', rightText: 'c\n' }],
+  conflicts: [{ index: 1, chunkId: 10, baseText: 'a\n', leftText: 'b\n', rightText: 'c\n' }],
 };
 
 function token(cancelled = false) {
@@ -104,7 +117,13 @@ function model(modelId: string) {
 describe('explainViaAiSdk against a local OpenAI-compatible stub', () => {
   test('forwards streamed deltas and finishes with onDone', async () => {
     const { deltas, events, callbacks } = collect();
-    await explainViaAiSdk(model('ok-model'), 'Stub', request, callbacks, token());
+    await streamViaAiSdk(
+      model('ok-model'),
+      'Stub',
+      buildExplainPrompt(request),
+      callbacks,
+      token(),
+    );
     expect(deltas.join('')).toBe('Hello world');
     expect(events).toEqual(['done']);
     // The request carried our prompt: system + the conflict texts.
@@ -114,7 +133,13 @@ describe('explainViaAiSdk against a local OpenAI-compatible stub', () => {
 
   test('maps a 401 to the invalid-key message, no onDone', async () => {
     const { events, callbacks } = collect();
-    await explainViaAiSdk(model('error-model'), 'Stub', request, callbacks, token());
+    await streamViaAiSdk(
+      model('error-model'),
+      'Stub',
+      buildExplainPrompt(request),
+      callbacks,
+      token(),
+    );
     expect(events).toHaveLength(1);
     expect(events[0]).toContain('Invalid Stub API key');
     expect(events[0]).toContain('Set AI Provider & API Key');
@@ -122,14 +147,47 @@ describe('explainViaAiSdk against a local OpenAI-compatible stub', () => {
 
   test("a 'length' finish is surfaced as a truncated completion", async () => {
     const { deltas, events, callbacks } = collect();
-    await explainViaAiSdk(model('truncating-model'), 'Stub', request, callbacks, token());
+    await streamViaAiSdk(
+      model('truncating-model'),
+      'Stub',
+      buildExplainPrompt(request),
+      callbacks,
+      token(),
+    );
     expect(deltas.join('')).toBe('Hello world');
     expect(events).toEqual(['done:truncated']);
   });
 
   test('the request carries an explicit output-token cap', async () => {
     const { callbacks } = collect();
-    await explainViaAiSdk(model('ok-model'), 'Stub', request, callbacks, token());
+    await streamViaAiSdk(
+      model('ok-model'),
+      'Stub',
+      buildExplainPrompt(request),
+      callbacks,
+      token(),
+    );
     expect(lastRequestBody).toContain('"max_tokens":16000');
+  });
+
+  test('resolve round-trip: streamed delimiter blocks parse into resolutions', async () => {
+    const { deltas, events, callbacks } = collect();
+    await streamViaAiSdk(
+      model('resolve-model'),
+      'Stub',
+      buildResolvePrompt(request, '### Conflict 1\nCombine both.'),
+      callbacks,
+      token(),
+    );
+    expect(events).toEqual(['done']);
+    // The stub streams a well-formed block; the same accumulate+parse the host does.
+    const parsed = parseResolutions(
+      deltas.join(''),
+      request.conflicts.map((c) => c.index),
+    );
+    expect(parsed.get(1)).toBe('merged();\n');
+    // The resolve prompt reached the wire with the analysis context.
+    expect(lastRequestBody).toContain('RESOLVED');
+    expect(lastRequestBody).toContain('Combine both.');
   });
 });
