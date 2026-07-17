@@ -19,6 +19,30 @@ export function joinLines(lines: readonly string[]): string {
   return lines.join('');
 }
 
+/**
+ * How lines are *compared* — never how they are stored or written. Output text always
+ * keeps its exact bytes; these modes only decide which differences count as changes.
+ */
+export type WhitespaceMode = 'exact' | 'trim' | 'ignoreAll' | 'ignoreAllAndEmpty';
+
+export interface ComputeOptions {
+  whitespace?: WhitespaceMode;
+}
+
+/** Reduces a line to its comparison key for the given mode. */
+function lineKey(line: string, mode: WhitespaceMode): string {
+  switch (mode) {
+    case 'exact':
+      return line;
+    case 'trim':
+      // Also swallows the terminator, so a trailing-newline difference is whitespace too.
+      return line.trim();
+    case 'ignoreAll':
+    case 'ignoreAllAndEmpty':
+      return line.replace(/\s+/g, '');
+  }
+}
+
 /** A contiguous region that differs between base and one side. */
 interface Hunk {
   base: LineRange;
@@ -40,13 +64,24 @@ interface Cluster {
  * Reduces a line diff to hunks. Consecutive removed/added runs collapse into a single
  * hunk, so a replaced line is one hunk rather than a delete plus an insert.
  */
-function diffHunks(baseLines: readonly string[], sideLines: readonly string[]): Hunk[] {
+function diffHunks(
+  baseLines: readonly string[],
+  sideLines: readonly string[],
+  mode: WhitespaceMode,
+): Hunk[] {
   const hunks: Hunk[] = [];
   let baseIdx = 0;
   let sideIdx = 0;
   let pending: Hunk | null = null;
 
-  for (const change of diffArrays(baseLines as string[], sideLines as string[])) {
+  const changes =
+    mode === 'exact'
+      ? diffArrays(baseLines as string[], sideLines as string[])
+      : diffArrays(baseLines as string[], sideLines as string[], {
+          comparator: (a, b) => lineKey(a, mode) === lineKey(b, mode),
+        });
+
+  for (const change of changes) {
     const count = change.value.length;
     if (!change.added && !change.removed) {
       if (pending) {
@@ -71,6 +106,16 @@ function diffHunks(baseLines: readonly string[], sideLines: readonly string[]): 
   }
   if (pending) {
     hunks.push(pending);
+  }
+  if (mode === 'ignoreAllAndEmpty') {
+    // A hunk whose every involved line is blank (after stripping) is pure blank-line
+    // noise; dropping it here means it never reaches clustering or classification.
+    return hunks.filter((hunk) => {
+      const blank = (line: string) => lineKey(line, mode) === '';
+      const baseBlank = baseLines.slice(hunk.base.start, hunk.base.end).every(blank);
+      const sideBlank = sideLines.slice(hunk.side.start, hunk.side.end).every(blank);
+      return !(baseBlank && sideBlank);
+    });
   }
   return hunks;
 }
@@ -123,8 +168,8 @@ function slice(lines: readonly string[], range: LineRange): string[] {
   return lines.slice(range.start, range.end);
 }
 
-function sameLines(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((line, i) => line === b[i]);
+function sameLines(a: readonly string[], b: readonly string[], mode: WhitespaceMode): boolean {
+  return a.length === b.length && a.every((line, i) => lineKey(line, mode) === lineKey(b[i]!, mode));
 }
 
 function subtypeOf(changed: boolean, base: LineRange, side: LineRange): ChunkSubtype {
@@ -145,6 +190,7 @@ function kindOf(
   changedRight: boolean,
   leftSlice: readonly string[],
   rightSlice: readonly string[],
+  mode: WhitespaceMode,
 ): ChunkKind {
   if (changedLeft && !changedRight) {
     return 'changedLeft';
@@ -152,7 +198,9 @@ function kindOf(
   if (changedRight && !changedLeft) {
     return 'changedRight';
   }
-  return sameLines(leftSlice, rightSlice) ? 'bothIdentical' : 'conflict';
+  // Sides equal under the active mode merge cleanly; taking either yields that side's
+  // exact bytes (left wins by convention when they differ only in whitespace).
+  return sameLines(leftSlice, rightSlice, mode) ? 'bothIdentical' : 'conflict';
 }
 
 /**
@@ -162,13 +210,19 @@ function kindOf(
  * meaningful even when only the right side changed — the unchanged side simply maps
  * through the running line offset.
  */
-export function computeChunks(base: string, left: string, right: string): Chunk[] {
+export function computeChunks(
+  base: string,
+  left: string,
+  right: string,
+  options?: ComputeOptions,
+): Chunk[] {
+  const mode = options?.whitespace ?? 'exact';
   const baseLines = splitLines(base);
   const leftLines = splitLines(left);
   const rightLines = splitLines(right);
 
-  const leftHunks = diffHunks(baseLines, leftLines);
-  const rightHunks = diffHunks(baseLines, rightLines);
+  const leftHunks = diffHunks(baseLines, leftLines, mode);
+  const rightHunks = diffHunks(baseLines, rightLines, mode);
   const clusters = clusterHunks(leftHunks, rightHunks);
 
   const chunks: Chunk[] = [];
@@ -199,7 +253,7 @@ export function computeChunks(base: string, left: string, right: string): Chunk[
     const changedRight = rightMembers.length > 0;
     const leftSlice = slice(leftLines, leftRange);
     const rightSlice = slice(rightLines, rightRange);
-    const kind = kindOf(changedLeft, changedRight, leftSlice, rightSlice);
+    const kind = kindOf(changedLeft, changedRight, leftSlice, rightSlice, mode);
 
     chunks.push({
       id: chunks.length,
