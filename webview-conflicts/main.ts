@@ -128,9 +128,12 @@ function fileRow(file: ConflictFileEntry, indent: boolean): HTMLElement {
   row.append(name, statusCell(file.yours), statusCell(file.theirs));
   row.addEventListener('mousedown', (event) => select(file, event));
   row.addEventListener('dblclick', () => {
-    if (file.mergeable) {
-      post({ type: 'openMerge', payload: { path: file.path } });
-    }
+    // A delete/modify row has no three-pane view — it gets the keep-or-delete prompt.
+    post(
+      file.mergeable
+        ? { type: 'openMerge', payload: { path: file.path } }
+        : { type: 'resolveDeleteModify', payload: { path: file.path } },
+    );
   });
   return row;
 }
@@ -192,14 +195,16 @@ function actions(): HTMLElement {
 
   const acceptYours = element('button', undefined, 'Accept Yours');
   const acceptTheirs = element('button', undefined, 'Accept Theirs');
-  const merge = element('button', 'cf-primary', 'Merge…');
+  // For one delete/modify file the primary action is the keep-or-delete prompt instead.
+  const singleDeleteModify = chosen.length === 1 && !chosen[0]!.mergeable;
+  const merge = element('button', 'cf-primary', singleDeleteModify ? 'Resolve…' : 'Merge…');
 
   acceptYours.disabled = chosen.length === 0;
   acceptTheirs.disabled = chosen.length === 0;
   // The three-pane editor needs exactly one file with content on both sides.
-  merge.disabled = chosen.length !== 1 || !chosen[0]!.mergeable;
-  if (chosen.length === 1 && !chosen[0]!.mergeable) {
-    merge.title = 'Deleted on one side — use Accept Yours / Accept Theirs instead';
+  merge.disabled = chosen.length !== 1;
+  if (singleDeleteModify) {
+    merge.title = 'Deleted on one side — decide whether to keep or delete the file';
   }
 
   acceptYours.addEventListener('click', () =>
@@ -209,7 +214,11 @@ function actions(): HTMLElement {
     post({ type: 'acceptSide', payload: { paths: chosen.map((f) => f.path), side: 'theirs' } }),
   );
   merge.addEventListener('click', () =>
-    post({ type: 'openMerge', payload: { path: chosen[0]!.path } }),
+    post(
+      singleDeleteModify
+        ? { type: 'resolveDeleteModify', payload: { path: chosen[0]!.path } }
+        : { type: 'openMerge', payload: { path: chosen[0]!.path } },
+    ),
   );
 
   column.append(acceptYours, acceptTheirs, merge);
@@ -306,9 +315,13 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Enter') {
     const chosen = order.filter((f) => selected.has(f.path));
-    if (chosen.length === 1 && chosen[0]!.mergeable) {
+    if (chosen.length === 1) {
       event.preventDefault();
-      post({ type: 'openMerge', payload: { path: chosen[0]!.path } });
+      post(
+        chosen[0]!.mergeable
+          ? { type: 'openMerge', payload: { path: chosen[0]!.path } }
+          : { type: 'resolveDeleteModify', payload: { path: chosen[0]!.path } },
+      );
     }
     return;
   }

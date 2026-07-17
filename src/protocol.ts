@@ -99,4 +99,5 @@ export type ConflictsToHostMessage =
   | { type: 'ready' }
   | { type: 'acceptSide'; payload: { paths: string[]; side: 'yours' | 'theirs' } }
   | { type: 'openMerge'; payload: { path: string } }
+  | { type: 'resolveDeleteModify'; payload: { path: string } }
   | { type: 'close' };
