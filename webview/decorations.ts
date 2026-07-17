@@ -108,6 +108,7 @@ function decorationsFor(
 export interface NavEmphasis {
   currentChunkId?: number | undefined;
   flashChunkId?: number | undefined;
+  hoverChunkId?: number | undefined;
 }
 
 export function renderDecorations(
@@ -189,6 +190,9 @@ export function renderDecorations(
     }
     if (chunk.id === emphasis?.flashChunkId) {
       pushEmphasis(chunk, centerRange, 'mf-flash');
+    }
+    if (chunk.id === emphasis?.hoverChunkId) {
+      pushEmphasis(chunk, centerRange, 'mf-hover');
     }
   }
 

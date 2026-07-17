@@ -39,8 +39,11 @@ function colors(entries: Array<[string, string | undefined]>): Record<string, st
  */
 export function applyTheme(): void {
   const background = cssVar('--vscode-editor-background');
+  const dark = isDark(background);
+  // The chunk palette is tuned per theme in CSS; this class is the switch.
+  document.body.classList.toggle('mf-light', !dark);
   monaco.editor.defineTheme(THEME_NAME, {
-    base: isDark(background) ? 'vs-dark' : 'vs',
+    base: dark ? 'vs-dark' : 'vs',
     inherit: true,
     rules: [],
     colors: colors([

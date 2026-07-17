@@ -140,9 +140,20 @@ export function buildToolbar(
       const nonConflicting = pending.filter((c) => c.kind !== 'conflict').length;
       const conflicts = pending.filter((c) => c.kind === 'conflict').length;
 
-      applyAll.toggleAttribute('disabled', nonConflicting === 0);
-      fromLeft.toggleAttribute('disabled', nonConflicting === 0);
-      fromRight.toggleAttribute('disabled', nonConflicting === 0);
+      const noneLeft = nonConflicting === 0;
+      applyAll.toggleAttribute('disabled', noneLeft);
+      fromLeft.toggleAttribute('disabled', noneLeft);
+      fromRight.toggleAttribute('disabled', noneLeft);
+      // A disabled button should say why, not just refuse.
+      applyAll.title = noneLeft
+        ? 'Nothing non-conflicting left to apply'
+        : 'Apply all non-conflicting changes';
+      fromLeft.title = noneLeft
+        ? 'Nothing non-conflicting left to apply'
+        : 'Apply non-conflicting changes from the left side';
+      fromRight.title = noneLeft
+        ? 'Nothing non-conflicting left to apply'
+        : 'Apply non-conflicting changes from the right side';
       previous.toggleAttribute('disabled', chunks.length === 0);
       next.toggleAttribute('disabled', chunks.length === 0);
 

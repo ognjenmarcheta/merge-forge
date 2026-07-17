@@ -466,3 +466,136 @@ button:disabled {
   justify-content: center;
   min-width: 24px;
 }
+
+/* --- band colours (dark default), hover, and the light-theme palette --------- */
+
+.mf-band {
+  stroke-width: 1;
+}
+
+.mf-band-conf {
+  fill: rgba(199, 84, 80, 0.3);
+  stroke: rgba(199, 84, 80, 0.75);
+}
+
+.mf-band-add {
+  fill: rgba(98, 150, 85, 0.28);
+  stroke: rgba(98, 150, 85, 0.75);
+}
+
+.mf-band-del {
+  fill: rgba(128, 128, 128, 0.25);
+  stroke: rgba(128, 128, 128, 0.7);
+}
+
+.mf-band-mod {
+  fill: rgba(58, 121, 189, 0.26);
+  stroke: rgba(58, 121, 189, 0.75);
+}
+
+.mf-band,
+.mf-chunk-glyph {
+  cursor: pointer;
+}
+
+.mf-hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mf-band-hover {
+  stroke-width: 2;
+  filter: brightness(1.25);
+}
+
+body.mf-light .mf-hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body.mf-light .mf-mod {
+  background: rgba(21, 101, 192, 0.14);
+}
+
+body.mf-light .mf-add {
+  background: rgba(46, 125, 50, 0.15);
+}
+
+body.mf-light .mf-del {
+  background: rgba(97, 97, 97, 0.13);
+}
+
+body.mf-light .mf-conf {
+  background: rgba(198, 40, 40, 0.15);
+}
+
+body.mf-light .mf-word-mod {
+  background: rgba(21, 101, 192, 0.3);
+}
+
+body.mf-light .mf-word-conf {
+  background: rgba(198, 40, 40, 0.32);
+}
+
+body.mf-light .mf-flash {
+  animation: none;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+body.mf-light .mf-band-conf {
+  fill: rgba(198, 40, 40, 0.18);
+  stroke: rgba(198, 40, 40, 0.6);
+}
+
+body.mf-light .mf-band-add {
+  fill: rgba(46, 125, 50, 0.18);
+  stroke: rgba(46, 125, 50, 0.6);
+}
+
+body.mf-light .mf-band-del {
+  fill: rgba(97, 97, 97, 0.16);
+  stroke: rgba(97, 97, 97, 0.55);
+}
+
+body.mf-light .mf-band-mod {
+  fill: rgba(21, 101, 192, 0.16);
+  stroke: rgba(21, 101, 192, 0.6);
+}
+
+body.mf-light .mf-zone-mod {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(21, 101, 192, 0.1),
+    rgba(21, 101, 192, 0.1) 4px,
+    rgba(21, 101, 192, 0.04) 4px,
+    rgba(21, 101, 192, 0.04) 8px
+  );
+}
+
+body.mf-light .mf-zone-add {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(46, 125, 50, 0.1),
+    rgba(46, 125, 50, 0.1) 4px,
+    rgba(46, 125, 50, 0.04) 4px,
+    rgba(46, 125, 50, 0.04) 8px
+  );
+}
+
+body.mf-light .mf-zone-del {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(97, 97, 97, 0.1),
+    rgba(97, 97, 97, 0.1) 4px,
+    rgba(97, 97, 97, 0.04) 4px,
+    rgba(97, 97, 97, 0.04) 8px
+  );
+}
+
+body.mf-light .mf-zone-conf {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(198, 40, 40, 0.11),
+    rgba(198, 40, 40, 0.11) 4px,
+    rgba(198, 40, 40, 0.04) 4px,
+    rgba(198, 40, 40, 0.04) 8px
+  );
+}

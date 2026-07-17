@@ -16,20 +16,14 @@ export interface ConnectorCallbacks {
   onDismiss: (chunkId: number, side: StripSide) => void;
   /** Which controls each side currently offers (see resolve.sideControls). */
   controls: (chunk: Chunk) => SideControls;
+  /** Pointer entered/left a chunk's band or controls; undefined clears the hover. */
+  onHover: (chunkId: number | undefined) => void;
 }
 
 /** Moves a pixel extent into the strip's coordinate space. */
 function shift(extent: PixelExtent, by: number): PixelExtent {
   return { top: extent.top + by, bottom: extent.bottom + by };
 }
-
-/** Fill and edge colours per chunk family — the same palette the line fills use. */
-const COLORS: Record<ReturnType<typeof visualOf>, { fill: string; edge: string }> = {
-  conf: { fill: 'rgba(199, 84, 80, 0.30)', edge: 'rgba(199, 84, 80, 0.75)' },
-  add: { fill: 'rgba(98, 150, 85, 0.28)', edge: 'rgba(98, 150, 85, 0.75)' },
-  del: { fill: 'rgba(128, 128, 128, 0.25)', edge: 'rgba(128, 128, 128, 0.7)' },
-  mod: { fill: 'rgba(58, 121, 189, 0.26)', edge: 'rgba(58, 121, 189, 0.75)' },
-};
 
 /**
  * Draws the gutter strips between the panes: an S-curved band linking each chunk's rows
@@ -103,7 +97,11 @@ export class Connectors {
   render(
     chunks: readonly Chunk[],
     centerRanges: ReadonlyMap<number, CenterRange>,
-    emphasis?: { currentChunkId?: number | undefined; flashChunkId?: number | undefined },
+    emphasis?: {
+      currentChunkId?: number | undefined;
+      flashChunkId?: number | undefined;
+      hoverChunkId?: number | undefined;
+    },
   ): void {
     const outer = this.panes[this.side];
     const center = this.panes.center;
@@ -149,6 +147,9 @@ export class Connectors {
       if (chunk.id === emphasis?.flashChunkId) {
         band.classList.add('mf-band-flash');
       }
+      if (chunk.id === emphasis?.hoverChunkId) {
+        band.classList.add('mf-band-hover');
+      }
       shapes.push(band);
       controls.push(...this.controlsFor(chunk, outerExtent.top));
     }
@@ -183,13 +184,14 @@ export class Connectors {
         `C ${midBend} ${cBottom} ${midBend} ${oBottom} ${xShelf} ${oBottom} ` +
         `L ${xOuter} ${oBottom} Z`,
     );
-    const colors = COLORS[visualOf(chunk)];
-    path.setAttribute('fill', colors.fill);
-    path.setAttribute('stroke', colors.edge);
-    path.setAttribute('stroke-width', '1');
+    // Colours live in CSS (.mf-band-<family>) so the light theme can override them.
+    path.classList.add('mf-band', `mf-band-${visualOf(chunk)}`);
     if (chunk.state !== 'initial') {
       path.setAttribute('opacity', '0.3');
     }
+    path.style.pointerEvents = 'auto';
+    path.addEventListener('mouseenter', () => this.callbacks.onHover(chunk.id));
+    path.addEventListener('mouseleave', () => this.callbacks.onHover(undefined));
     return path;
   }
 
@@ -199,6 +201,8 @@ export class Connectors {
     // Sit the pair on the band's shelf at the chunk's first row, WebStorm-style.
     row.style.top = `${Math.max(0, top + 1)}px`;
 
+    row.addEventListener('mouseenter', () => this.callbacks.onHover(chunk.id));
+    row.addEventListener('mouseleave', () => this.callbacks.onHover(undefined));
     const offered = this.callbacks.controls(chunk);
     const showAccept = this.side === 'left' ? offered.acceptLeft : offered.acceptRight;
     const showIgnore = this.side === 'left' ? offered.ignoreLeft : offered.ignoreRight;

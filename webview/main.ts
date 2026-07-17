@@ -58,6 +58,8 @@ interface Session {
   /** Navigation emphasis: the chunk you last jumped to, and the transient arrival flash. */
   currentChunkId: number | undefined;
   flashChunkId: number | undefined;
+  /** Chunk under the pointer (band or controls); never snapshotted. */
+  hoverChunkId: number | undefined;
 }
 
 let session: Session | undefined;
@@ -114,7 +116,11 @@ function refresh(): void {
     centerRanges,
     session.collections,
     session.highlight === 'words' ? session.wordRanges : undefined,
-    { currentChunkId: session.currentChunkId, flashChunkId: session.flashChunkId },
+    {
+      currentChunkId: session.currentChunkId,
+      flashChunkId: session.flashChunkId,
+      hoverChunkId: session.hoverChunkId,
+    },
   );
   redrawConnectors();
   session.toolbar.update(chunks);
@@ -133,6 +139,7 @@ function redrawConnectors(): void {
   const emphasis = {
     currentChunkId: session.currentChunkId,
     flashChunkId: session.flashChunkId,
+    hoverChunkId: session.hoverChunkId,
   };
   session.connectors.left.render(session.chunks, centerRanges, emphasis);
   session.connectors.right.render(session.chunks, centerRanges, emphasis);
@@ -346,6 +353,12 @@ function start(payload: InitPayload): void {
     onDismiss: (chunkId: number, side: 'left' | 'right') =>
       session?.store.dismissSide(chunkId, side),
     controls: (chunk: Chunk) => sideControls(chunk),
+    onHover: (chunkId: number | undefined) => {
+      if (session && session.hoverChunkId !== chunkId) {
+        session.hoverChunkId = chunkId;
+        refresh();
+      }
+    },
   };
 
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {
@@ -393,6 +406,7 @@ function start(payload: InitPayload): void {
     zone: payload.eol.suggested,
     currentChunkId: undefined,
     flashChunkId: undefined,
+    hoverChunkId: undefined,
   };
 
   syncScrolling(panes, redrawConnectors);
