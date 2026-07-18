@@ -16,6 +16,8 @@ export interface ExplainDrawer {
   showResolveReport(applied: number, requested: number, remaining: number): void;
   /** The raw explanation text accumulated so far — context for the resolve request. */
   explanationText(): string;
+  /** Appends the user's question and switches into streaming for the answer. */
+  askStart(question: string): void;
   readonly isOpen: boolean;
 }
 
@@ -26,6 +28,8 @@ export interface ExplainDrawerCallbacks {
   onSetup(): void;
   /** Fired from the "Resolve with AI" header button. */
   onResolve(): void;
+  /** Fired when the user submits a follow-up question. */
+  onAsk(question: string): void;
 }
 
 function escapeHtml(text: string): string {
@@ -107,8 +111,28 @@ export function createExplainDrawer(
   const body = document.createElement('div');
   body.className = 'mf-explain-body';
 
+  // The follow-up chat row: a question about these conflicts, answered in-stream.
+  const askRow = document.createElement('form');
+  askRow.className = 'mf-explain-ask';
+  const askInput = document.createElement('input');
+  askInput.type = 'text';
+  askInput.placeholder = 'Ask about these conflicts…';
+  askInput.setAttribute('aria-label', 'Ask about these conflicts');
+  const askSend = document.createElement('button');
+  askSend.type = 'submit';
+  askSend.textContent = 'Ask';
+  askRow.append(askInput, askSend);
+  askRow.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const question = askInput.value.trim();
+    if (question !== '') {
+      askInput.value = '';
+      callbacks.onAsk(question);
+    }
+  });
+
   host.classList.add('mf-explain', 'mf-hidden');
-  host.replaceChildren(header, body);
+  host.replaceChildren(header, body, askRow);
 
   let streaming = false;
   let resolving = false;
@@ -116,7 +140,10 @@ export function createExplainDrawer(
   let stickToBottom = true;
 
   const syncResolveButton = (): void => {
-    resolve.toggleAttribute('disabled', streaming || resolving);
+    const busy = streaming || resolving;
+    resolve.toggleAttribute('disabled', busy);
+    askInput.toggleAttribute('disabled', busy);
+    askSend.toggleAttribute('disabled', busy);
   };
 
   body.addEventListener('scroll', () => {
@@ -200,6 +227,15 @@ export function createExplainDrawer(
     },
     explanationText() {
       return accumulated;
+    },
+    askStart(question) {
+      streaming = true;
+      stickToBottom = true;
+      syncResolveButton();
+      host.classList.remove('mf-hidden');
+      const divider = accumulated.trim() === '' ? '' : '\n\n---\n\n';
+      accumulated += `${divider}**You:** ${question}\n\n`;
+      render();
     },
     showError(message, unconfigured) {
       streaming = false;

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
 import * as vscode from 'vscode';
-import { buildExplainPrompt, buildResolvePrompt } from '../ai/prompt';
+import { buildChatPrompt, buildExplainPrompt, buildResolvePrompt } from '../ai/prompt';
 import { getExplainProvider, type ExplainProvider } from '../ai/provider';
 import { parseResolutions } from '../ai/resolveParser';
 import { applyResolved } from '../git/applyResult';
@@ -191,6 +191,9 @@ export class MergePanel {
       case 'aiResolve':
         void this.aiResolve(message.payload.request, message.payload.explanation);
         break;
+      case 'aiAsk':
+        void this.aiAsk(message.payload.request, message.payload.history, message.payload.question);
+        break;
       case 'explainCancel':
         this.cancelExplain();
         break;
@@ -248,6 +251,28 @@ export class MergePanel {
             missing: request.conflicts.length - resolutions.length,
           });
         },
+        onError: (message) => this.post({ type: 'explainError', message }),
+      },
+      started.token,
+    );
+  }
+
+  /** The drawer's follow-up chat — answers stream over the explain channel. */
+  private async aiAsk(
+    request: ExplainRequest,
+    history: Array<{ question: string; answer: string }>,
+    question: string,
+  ): Promise<void> {
+    const started = await this.startAiRequest();
+    if (!started) {
+      return;
+    }
+    await started.provider.stream(
+      buildChatPrompt(request, history, question),
+      {
+        onDelta: (text) => this.post({ type: 'explainDelta', text }),
+        onDone: (truncated) =>
+          this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
         onError: (message) => this.post({ type: 'explainError', message }),
       },
       started.token,

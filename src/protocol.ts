@@ -99,6 +99,14 @@ export type WebviewToHostMessage =
   | { type: 'abort' }
   | { type: 'explain'; payload: ExplainRequest }
   | { type: 'aiResolve'; payload: { request: ExplainRequest; explanation?: string } }
+  | {
+      type: 'aiAsk';
+      payload: {
+        request: ExplainRequest;
+        history: Array<{ question: string; answer: string }>;
+        question: string;
+      };
+    }
   | { type: 'explainCancel' }
   | { type: 'openAiSetup' }
   | { type: 'workSnapshot'; payload: WorkSnapshot }

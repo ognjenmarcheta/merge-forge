@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { buildExplainPrompt, buildResolvePrompt, SIDE_TEXT_CAP } from '../src/ai/prompt';
+import {
+  buildChatPrompt,
+  buildExplainPrompt,
+  buildResolvePrompt,
+  SIDE_TEXT_CAP,
+} from '../src/ai/prompt';
 import type { ExplainRequest } from '../src/protocol';
 
 function request(overrides: Partial<ExplainRequest> = {}): ExplainRequest {
@@ -125,5 +130,33 @@ describe('buildResolvePrompt', () => {
   test('without an explanation there is no analysis section', () => {
     const { user } = buildResolvePrompt(request());
     expect(user).not.toContain('Earlier analysis');
+  });
+});
+
+describe('buildChatPrompt', () => {
+  test('carries the conflicts, prior turns in order, and the new question last', () => {
+    const { user } = buildChatPrompt(
+      request(),
+      [
+        { question: 'Why do these collide?', answer: 'Both edited the greeting.' },
+        { question: 'Which side is newer?', answer: 'Theirs, by commit date.' },
+      ],
+      'So which should I take?',
+    );
+    expect(user).toContain('## Conflict 1');
+    const q1 = user.indexOf('Why do these collide?');
+    const a1 = user.indexOf('Both edited the greeting.');
+    const q2 = user.indexOf('Which side is newer?');
+    const final = user.indexOf('So which should I take?');
+    expect(q1).toBeGreaterThan(-1);
+    expect(a1).toBeGreaterThan(q1);
+    expect(q2).toBeGreaterThan(a1);
+    expect(final).toBeGreaterThan(q2);
+  });
+
+  test('works with no history', () => {
+    const { user, system } = buildChatPrompt(request(), [], 'What changed here?');
+    expect(user).toContain('What changed here?');
+    expect(system.toLowerCase()).toContain('question');
   });
 });

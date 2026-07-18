@@ -111,3 +111,29 @@ export function buildResolvePrompt(
   );
   return { system: RESOLVE_SYSTEM_PROMPT, user: lines.join('\n') };
 }
+
+const CHAT_SYSTEM_PROMPT = `You are a senior engineer helping a teammate think through a three-way Git
+merge. You receive the file's unresolved conflicts (BASE plus both branch versions), possibly an
+earlier conversation, and a new question. Answer the question directly and concisely in markdown,
+grounded in the conflict code — quote the relevant lines when it helps. If the question asks what to
+do, give a concrete recommendation.`;
+
+/**
+ * The drawer's follow-up chat: conflicts + the conversation so far + the new question,
+ * folded into a single prompt so every backend (including vscode.lm) can serve it.
+ */
+export function buildChatPrompt(
+  request: ExplainRequest,
+  history: ReadonlyArray<{ question: string; answer: string }>,
+  question: string,
+): { system: string; user: string } {
+  const lines = conflictSections(request);
+  if (history.length > 0) {
+    lines.push('Conversation so far:', '');
+    for (const turn of history) {
+      lines.push(`Q: ${turn.question}`, '', `A: ${turn.answer}`, '');
+    }
+  }
+  lines.push('New question:', question);
+  return { system: CHAT_SYSTEM_PROMPT, user: lines.join('\n') };
+}

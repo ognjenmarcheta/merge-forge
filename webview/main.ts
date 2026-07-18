@@ -412,6 +412,20 @@ function requestAiResolve(onlyChunkId?: number): void {
   });
 }
 
+/** Follow-up chat: prior turns, folded into each new question's prompt on the host. */
+const chatHistory: Array<{ question: string; answer: string }> = [];
+let pendingAsk: { question: string; answer: string } | undefined;
+
+function requestAiAsk(question: string): void {
+  const request = buildAiRequest();
+  if (!request || !drawer) {
+    return;
+  }
+  pendingAsk = { question, answer: '' };
+  drawer.askStart(question);
+  post({ type: 'aiAsk', payload: { request, history: [...chatHistory], question } });
+}
+
 /** The ✦ menu on a conflict: Explain / Resolve scoped to that one chunk. */
 let aiMenu: HTMLElement | undefined;
 function closeAiMenu(): void {
@@ -604,7 +618,8 @@ function start(payload: InitPayload): void {
   drawer = createExplainDrawer(layout.explainHost, {
     onCancel: () => post({ type: 'explainCancel' }),
     onSetup: () => post({ type: 'openAiSetup' }),
-    onResolve: requestAiResolve,
+    onResolve: () => requestAiResolve(),
+    onAsk: requestAiAsk,
   });
 
   const toolbar = buildToolbar(layout.toolbar, layout.counter, {
@@ -705,10 +720,18 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
   } else if (message.type === 'runAction') {
     runAction(message.action);
   } else if (message.type === 'explainDelta') {
+    if (pendingAsk) {
+      pendingAsk.answer += message.text;
+    }
     drawer?.appendDelta(message.text);
   } else if (message.type === 'explainDone') {
+    if (pendingAsk) {
+      chatHistory.push(pendingAsk);
+      pendingAsk = undefined;
+    }
     drawer?.finish(message.truncated === true);
   } else if (message.type === 'explainError') {
+    pendingAsk = undefined;
     drawer?.setResolving(false);
     drawer?.showError(message.message, message.unconfigured === true);
   } else if (message.type === 'aiResolutions') {
