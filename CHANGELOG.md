@@ -109,3 +109,18 @@ Multi-provider AI backends:
   suggestions. Partial answers apply what parsed and report the rest: "Resolved 3 of
   4 — 1 conflict left for you." Works with all providers, including the editor's own
   models and local Ollama.
+
+## 0.6.0 — unreleased
+
+The workflow-loop and per-chunk AI round:
+
+- **Next-file loop**: after Apply, the toast offers [Next Conflict] to jump straight
+  into the next conflicted file; `mergeForge.autoAdvance` skips the toast entirely.
+  The merge tab title shows progress ("Merge: file (2/5)").
+- **Crash-safety**: half-done merges are snapshotted as you work; reopening the same
+  merge (window reload, closed tab) offers "You have unsaved work — Restore / Discard".
+  Never silent, and never offered once the underlying git stages changed.
+- **Per-chunk ✦**: every red conflict's gutter gains a ✦ opening a two-item menu —
+  Explain this conflict / Resolve this conflict — scoped to just that chunk.
+- **Ask about these conflicts**: a chat box at the drawer's bottom answers follow-up
+  questions with full conversation context, on any configured AI backend.

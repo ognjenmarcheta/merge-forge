@@ -124,7 +124,8 @@ button:disabled {
 
 .mf-strip {
   position: relative;
-  flex: 0 0 36px;
+  /* Wide enough for three glyphs on a conflict row: × » ✦ */
+  flex: 0 0 52px;
   overflow: hidden;
   border-left: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   border-right: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
