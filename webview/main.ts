@@ -323,8 +323,27 @@ function resolveAndAdvance(run: () => void, chunkId: number): void {
  * automatic answer, and concatenating "both added" variants duplicates real functions
  * (found in the field). Red stays red until a human decides.
  */
-function applyAllSafe(): void {
-  session?.store.applyMany((chunk) => nonConflictingAction(chunk));
+function applyAllSafe(): number {
+  return session?.store.applyMany((chunk) => nonConflictingAction(chunk)) ?? 0;
+}
+
+/**
+ * "Fix all with AI": the whole file in one click. Non-conflicting changes are applied
+ * mechanically (deterministic, byte-exact — no reason to ask a model); only the red
+ * conflicts go to the AI. The drawer report combines both counts.
+ */
+let fixAllMechanical = 0;
+function fixAllWithAi(): void {
+  if (!session) {
+    return;
+  }
+  const mechanical = applyAllSafe();
+  const conflictsLeft = session.chunks.some((c) => c.kind === 'conflict' && c.state === 'initial');
+  if (conflictsLeft) {
+    fixAllMechanical = mechanical;
+    requestAiResolve();
+  }
+  // No conflicts: the wand already settled everything; the done card takes it from here.
 }
 
 function runAction(action: MergeAction): void {
@@ -499,7 +518,8 @@ function applyAiResolutions(
   const remaining = session.chunks.filter(
     (c) => c.kind === 'conflict' && c.state === 'initial',
   ).length;
-  drawer.showResolveReport(applied, resolutions.length + missing, remaining);
+  drawer.showResolveReport(applied, resolutions.length + missing, remaining, fixAllMechanical);
+  fixAllMechanical = 0;
 }
 
 /**
@@ -636,6 +656,7 @@ function start(payload: InitPayload): void {
       }
     },
     explain: requestExplain,
+    fixAll: fixAllWithAi,
   });
   layout.doneAction.addEventListener('click', requestApply);
   buildFooter(layout.footer, {

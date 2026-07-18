@@ -124,3 +124,11 @@ The workflow-loop and per-chunk AI round:
   Explain this conflict / Resolve this conflict — scoped to just that chunk.
 - **Ask about these conflicts**: a chat box at the drawer's bottom answers follow-up
   questions with full conversation context, on any configured AI backend.
+
+## 0.7.0 — unreleased
+
+- **▶ Fix all with AI**: one toolbar click settles the whole file. Non-conflicting
+  changes are applied mechanically (deterministic, byte-exact — no AI involved), and
+  only the red conflicts go to the AI. Combined report in the drawer: "Resolved 2 of 2
+  conflicts + applied 3 non-conflicting changes — review the result; Cmd+Z reverts."
+  Everything stays individually undoable, and nothing touches git until Apply.

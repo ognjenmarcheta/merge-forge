@@ -13,6 +13,8 @@ export interface ToolbarActions {
   setWhitespace: (mode: WhitespaceMode) => void;
   setHighlight: (mode: HighlightMode) => void;
   explain: () => void;
+  /** Everything in one click: safe changes mechanically, conflicts via AI. */
+  fixAll: () => void;
 }
 
 export interface FooterActions {
@@ -102,6 +104,11 @@ export function buildToolbar(
     actions.applyAllNonConflicting,
   );
   const explain = iconButton('sparkle', 'Explain conflicts with AI', actions.explain);
+  const fixAll = iconButton(
+    'run-all',
+    'Fix all with AI — apply safe changes, AI-resolve conflicts',
+    actions.fixAll,
+  );
 
   const whitespace = select<WhitespaceMode>(
     'How whitespace differences are treated when comparing',
@@ -132,6 +139,7 @@ export function buildToolbar(
     applyAll,
     separator(),
     explain,
+    fixAll,
     separator(),
     whitespace,
     highlight,
@@ -166,6 +174,12 @@ export function buildToolbar(
       explain.title = noConflicts
         ? 'No unresolved conflicts to explain'
         : 'Explain conflicts with AI';
+
+      fixAll.toggleAttribute('disabled', pending.length === 0);
+      fixAll.title =
+        pending.length === 0
+          ? 'Nothing left to fix'
+          : 'Fix all with AI — apply safe changes, AI-resolve conflicts';
 
       counter.classList.toggle('mf-done', pending.length === 0);
       if (chunks.length === 0) {

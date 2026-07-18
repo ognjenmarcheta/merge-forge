@@ -13,7 +13,12 @@ export interface ExplainDrawer {
   /** Marks the resolve request in flight: disables the button, shows progress. */
   setResolving(active: boolean): void;
   /** Renders the outcome line after resolutions were applied. */
-  showResolveReport(applied: number, requested: number, remaining: number): void;
+  showResolveReport(
+    applied: number,
+    requested: number,
+    remaining: number,
+    mechanical?: number,
+  ): void;
   /** The raw explanation text accumulated so far — context for the resolve request. */
   explanationText(): string;
   /** Appends the user's question and switches into streaming for the answer. */
@@ -213,16 +218,21 @@ export function createExplainDrawer(
         );
       }
     },
-    showResolveReport(applied, requested, remaining) {
+    showResolveReport(applied, requested, remaining, mechanical = 0) {
       resolving = false;
       syncResolveButton();
+      const alsoApplied =
+        mechanical > 0
+          ? ` + applied ${mechanical} non-conflicting change${mechanical === 1 ? '' : 's'}`
+          : '';
       const left =
         remaining > 0
           ? ` ${remaining} conflict${remaining === 1 ? '' : 's'} left for you.`
           : ' All conflicts are resolved.';
       render(
-        `<p class="mf-explain-report">✦ Resolved ${applied} of ${requested} — ` +
-          `review the result; Cmd+Z reverts.${left}</p>`,
+        `<p class="mf-explain-report">✦ Resolved ${applied} of ${requested} conflict${
+          requested === 1 ? '' : 's'
+        }${alsoApplied} — review the result; Cmd+Z reverts.${left}</p>`,
       );
     },
     explanationText() {
