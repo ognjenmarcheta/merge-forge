@@ -18,6 +18,8 @@ export interface ConnectorCallbacks {
   controls: (chunk: Chunk) => SideControls;
   /** Pointer entered/left a chunk's band or controls; undefined clears the hover. */
   onHover: (chunkId: number | undefined) => void;
+  /** The ✦ on a conflict: open the per-chunk AI menu anchored at the glyph. */
+  onAiMenu: (chunkId: number, anchor: DOMRect) => void;
 }
 
 /** Moves a pixel extent into the strip's coordinate space. */
@@ -222,14 +224,23 @@ export class Connectors {
         )
       : null;
 
+    // Per-chunk AI entry point — left strip only, so the pair isn't duplicated.
+    const sparkle =
+      this.side === 'left' && chunk.kind === 'conflict' && chunk.state === 'initial'
+        ? this.glyph('sparkle', 'AI: explain or resolve this conflict', (event) => {
+            const target = event.currentTarget as HTMLElement;
+            this.callbacks.onAiMenu(chunk.id, target.getBoundingClientRect());
+          })
+        : null;
+
     // The arrow always sits on the *inner* side (toward the result), × on the outer:
     // left strip reads "× »", right strip reads "« ×" — matching WebStorm.
-    const ordered = this.side === 'left' ? [ignore, accept] : [accept, ignore];
+    const ordered = this.side === 'left' ? [ignore, accept, sparkle] : [accept, ignore];
     row.append(...ordered.filter((glyph): glyph is HTMLElement => glyph !== null));
     return row.childElementCount > 0 ? [row] : [];
   }
 
-  private glyph(codicon: string, title: string, onClick: () => void): HTMLElement {
+  private glyph(codicon: string, title: string, onClick: (event: MouseEvent) => void): HTMLElement {
     const button = document.createElement('button');
     button.className = 'mf-chunk-glyph';
     button.title = title;

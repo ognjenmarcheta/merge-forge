@@ -354,13 +354,19 @@ function requestApply(): void {
   post({ type: 'apply', payload: { content: session.store.result(), eol: session.zone } });
 }
 
-/** The unresolved conflicts (base + both sides) as an AI request, or undefined when none. */
-function buildAiRequest(): ExplainRequest | undefined {
+/**
+ * The unresolved conflicts (base + both sides) as an AI request, or undefined when none.
+ * With `onlyChunkId`, a single-conflict request — the ✦ menu's scope — keeping the
+ * chunk's position-based number so headings match the whole-file numbering.
+ */
+function buildAiRequest(onlyChunkId?: number): ExplainRequest | undefined {
   if (!session) {
     return undefined;
   }
   const { payload } = session;
-  const conflicts = session.chunks.filter((c) => c.kind === 'conflict' && c.state === 'initial');
+  const unresolved = session.chunks.filter((c) => c.kind === 'conflict' && c.state === 'initial');
+  const conflicts =
+    onlyChunkId === undefined ? unresolved : unresolved.filter((c) => c.id === onlyChunkId);
   if (conflicts.length === 0) {
     return undefined;
   }
@@ -368,7 +374,8 @@ function buildAiRequest(): ExplainRequest | undefined {
     filePath: payload.filePath,
     languageId: payload.languageId,
     labels: payload.labels,
-    conflicts: conflicts.map((chunk, position) => {
+    conflicts: conflicts.map((chunk) => {
+      const position = unresolved.indexOf(chunk);
       // Lines are terminator-inclusive, so joining with '' reconstructs the exact text.
       const texts = chunkTexts(chunk, payload.base, payload.left, payload.right);
       return {
@@ -392,8 +399,8 @@ function requestExplain(): void {
 }
 
 /** "Resolve with AI": ask for merged code and let `applyAiResolutions` place it. */
-function requestAiResolve(): void {
-  const request = buildAiRequest();
+function requestAiResolve(onlyChunkId?: number): void {
+  const request = buildAiRequest(onlyChunkId);
   if (!request || !drawer) {
     return;
   }
@@ -404,6 +411,54 @@ function requestAiResolve(): void {
     payload: { request, ...(explanation.trim() !== '' ? { explanation } : {}) },
   });
 }
+
+/** The ✦ menu on a conflict: Explain / Resolve scoped to that one chunk. */
+let aiMenu: HTMLElement | undefined;
+function closeAiMenu(): void {
+  aiMenu?.remove();
+  aiMenu = undefined;
+}
+
+function openAiMenu(chunkId: number, anchor: DOMRect): void {
+  closeAiMenu();
+  const menu = document.createElement('div');
+  menu.className = 'mf-ai-menu';
+  const item = (label: string, run: () => void): HTMLElement => {
+    const node = document.createElement('button');
+    node.textContent = label;
+    node.addEventListener('click', () => {
+      closeAiMenu();
+      run();
+    });
+    return node;
+  };
+  menu.append(
+    item('✦ Explain this conflict', () => {
+      const request = buildAiRequest(chunkId);
+      if (request && drawer) {
+        drawer.openLoading(request.conflicts.length);
+        post({ type: 'explain', payload: request });
+      }
+    }),
+    item('✦ Resolve this conflict', () => requestAiResolve(chunkId)),
+  );
+  document.body.append(menu);
+  // Anchor beside the glyph, clamped into the viewport.
+  const { width, height } = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(anchor.right + 4, window.innerWidth - width - 8)}px`;
+  menu.style.top = `${Math.min(anchor.top, window.innerHeight - height - 8)}px`;
+  aiMenu = menu;
+}
+
+window.addEventListener(
+  'mousedown',
+  (event) => {
+    if (aiMenu && !aiMenu.contains(event.target as Node)) {
+      closeAiMenu();
+    }
+  },
+  { capture: true },
+);
 
 /**
  * Places the AI's merged blocks into the result. Bottom-up by current position, so an
@@ -543,6 +598,7 @@ function start(payload: InitPayload): void {
         refresh();
       }
     },
+    onAiMenu: openAiMenu,
   };
 
   drawer = createExplainDrawer(layout.explainHost, {
@@ -668,6 +724,11 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
 window.addEventListener(
   'keydown',
   (event) => {
+    if (event.key === 'Escape' && aiMenu) {
+      event.preventDefault();
+      closeAiMenu();
+      return;
+    }
     if (event.key === 'F7') {
       event.preventDefault();
       navigate(event.shiftKey ? -1 : 1);
