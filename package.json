@@ -161,6 +161,11 @@
           "default": false,
           "description": "Apply all non-conflicting changes automatically when the merge editor opens."
         },
+        "mergeForge.autoAdvance": {
+          "type": "boolean",
+          "default": false,
+          "description": "After applying a resolved file, open the next conflicted file immediately instead of showing a notification."
+        },
         "mergeForge.ai.provider": {
           "type": "string",
           "enum": [

@@ -1,4 +1,4 @@
-import { relative } from 'node:path';
+import { join, relative } from 'node:path';
 import * as vscode from 'vscode';
 import { buildExplainPrompt, buildResolvePrompt } from '../ai/prompt';
 import { getExplainProvider, type ExplainProvider } from '../ai/provider';
@@ -60,9 +60,14 @@ export class MergePanel {
       return;
     }
 
+    // Tab-title progress: "(2/5)" — position in the conflicted list at open time.
+    const conflicted = await listConflicted(repoRoot).catch(() => [] as string[]);
+    const position = conflicted.indexOf(relativePath) + 1;
+    const progress =
+      position > 0 && conflicted.length > 1 ? ` (${position}/${conflicted.length})` : '';
     const panel = vscode.window.createWebviewPanel(
       'mergeForge.mergeEditor',
-      `Merge: ${relativePath}`,
+      `Merge: ${relativePath}${progress}`,
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -282,19 +287,33 @@ export class MergePanel {
     await this.reportProgress();
   }
 
-  /** Tells the user where the merge stands now that one more file is resolved. */
+  /** Tells the user where the merge stands, and keeps the loop going to the next file. */
   private async reportProgress(): Promise<void> {
     const remaining = await listConflicted(this.repoRoot).catch(() => undefined);
     if (remaining === undefined) {
       return;
     }
-    void vscode.window.showInformationMessage(
-      remaining.length === 0
-        ? `Resolved "${this.relativePath}" — all conflicts resolved, ready to commit.`
-        : `Resolved "${this.relativePath}" — ${remaining.length} conflicted file${
-            remaining.length === 1 ? '' : 's'
-          } left.`,
+    if (remaining.length === 0) {
+      void vscode.window.showInformationMessage(
+        `Resolved "${this.relativePath}" — all conflicts resolved, ready to commit.`,
+      );
+      return;
+    }
+    const next = vscode.Uri.file(join(this.repoRoot, remaining[0]!));
+    if (readAutoAdvance()) {
+      // Keyboard-driven loop: straight into the next conflicted file, no stop.
+      await vscode.commands.executeCommand('mergeForge.resolveThis', next);
+      return;
+    }
+    const choice = await vscode.window.showInformationMessage(
+      `Resolved "${this.relativePath}" — ${remaining.length} conflicted file${
+        remaining.length === 1 ? '' : 's'
+      } left.`,
+      'Next Conflict',
     );
+    if (choice === 'Next Conflict') {
+      await vscode.commands.executeCommand('mergeForge.resolveThis', next);
+    }
   }
 
   /** Closes without touching the conflicted file, so the merge can be restarted. */
@@ -322,6 +341,10 @@ function readAutoApply(): boolean {
   return vscode.workspace
     .getConfiguration('mergeForge')
     .get<boolean>('autoApplyNonConflicting', false);
+}
+
+function readAutoAdvance(): boolean {
+  return vscode.workspace.getConfiguration('mergeForge').get<boolean>('autoAdvance', false);
 }
 
 /** Reuses VS Code's own filename→language mapping, which Monaco's ids line up with. */
