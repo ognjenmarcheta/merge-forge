@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
 import * as vscode from 'vscode';
 import { buildExplainPrompt, buildResolvePrompt } from '../ai/prompt';
@@ -16,6 +17,7 @@ import type {
   MergeAction,
   StatePayload,
   WebviewToHostMessage,
+  WorkSnapshot,
 } from '../protocol';
 import { getWebviewHtml } from './html';
 
@@ -83,9 +85,27 @@ export class MergePanel {
       languageId: await detectLanguageId(uri),
       settings: { autoApplyNonConflicting: readAutoApply() },
     };
+    // Fingerprint of the three inputs: stale saved work (index moved on) never matches.
+    const inputsHash = createHash('sha1')
+      .update(payload.base)
+      .update('\0')
+      .update(payload.left)
+      .update('\0')
+      .update(payload.right)
+      .digest('hex');
     MergePanel.panels.set(
       key,
-      new MergePanel(panel, context, key, uri, payload, repoRoot, relativePath, inputs.hadBom),
+      new MergePanel(
+        panel,
+        context,
+        key,
+        uri,
+        payload,
+        repoRoot,
+        relativePath,
+        inputs.hadBom,
+        inputsHash,
+      ),
     );
   }
 
@@ -108,6 +128,7 @@ export class MergePanel {
     private readonly repoRoot: string,
     private readonly relativePath: string,
     private readonly hadBom: boolean,
+    private readonly inputsHash: string,
   ) {
     this.panel.webview.html = getWebviewHtml(this.panel.webview, context.extensionUri);
     this.panel.onDidDispose(() => {
@@ -133,8 +154,24 @@ export class MergePanel {
 
   private onMessage(message: WebviewToHostMessage): void {
     switch (message.type) {
-      case 'ready':
+      case 'ready': {
         this.post({ type: 'init', payload: this.payload });
+        // Offer earlier unsaved work back — only when the inputs are byte-identical.
+        const saved = this.context.workspaceState.get<StoredWork>(this.workKey());
+        if (saved && saved.inputsHash === this.inputsHash) {
+          this.post({ type: 'offerRestore', payload: saved.snapshot });
+        }
+        break;
+      }
+      case 'workSnapshot':
+        void this.context.workspaceState.update(this.workKey(), {
+          inputsHash: this.inputsHash,
+          snapshot: message.payload,
+          savedAt: Date.now(),
+        } satisfies StoredWork);
+        break;
+      case 'discardWork':
+        void this.context.workspaceState.update(this.workKey(), undefined);
         break;
       case 'state':
         this.latestState = message.payload;
@@ -276,6 +313,8 @@ export class MergePanel {
 
     try {
       await applyResolved(this.repoRoot, this.relativePath, content, eol, this.hadBom);
+      // The work is in git now; the crash-safety copy would only offer stale state.
+      await this.context.workspaceState.update(this.workKey(), undefined);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.post({ type: 'applyResult', ok: false, error: detail });
@@ -327,9 +366,22 @@ export class MergePanel {
       if (discard !== 'Discard') {
         return;
       }
+      // An explicit discard should not resurrect as a restore offer next time.
+      await this.context.workspaceState.update(this.workKey(), undefined);
     }
     this.panel.dispose();
   }
+
+  private workKey(): string {
+    return `mergeForge.work.${this.relativePath}`;
+  }
+}
+
+/** What crash-safety persists per file: the snapshot plus its validity fingerprint. */
+interface StoredWork {
+  inputsHash: string;
+  snapshot: WorkSnapshot;
+  savedAt: number;
 }
 
 function readEolSetting(): EolSetting {

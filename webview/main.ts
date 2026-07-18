@@ -10,6 +10,7 @@ import type {
   InitPayload,
   MergeAction,
   WebviewToHostMessage,
+  WorkSnapshot,
 } from '../src/protocol';
 import { baseLineNumbers, computeSegments, computeSpacers } from './alignment';
 import { Connectors } from './connectors';
@@ -186,6 +187,7 @@ function postState(): void {
     return;
   }
   const { chunks } = session;
+  const dirty = chunks.some((c) => c.state !== 'initial');
   post({
     type: 'state',
     payload: {
@@ -193,9 +195,75 @@ function postState(): void {
       unresolvedConflicts: chunks.filter((c) => c.kind === 'conflict' && c.state === 'initial')
         .length,
       pendingChanges: chunks.filter((c) => c.state === 'initial').length,
-      dirty: chunks.some((c) => c.state !== 'initial'),
+      dirty,
     },
   });
+  if (dirty) {
+    scheduleWorkSnapshot();
+  }
+}
+
+/** Crash-safety: ship the current work to the host, debounced past the edit burst. */
+let workSnapshotTimer: number | undefined;
+function scheduleWorkSnapshot(): void {
+  window.clearTimeout(workSnapshotTimer);
+  workSnapshotTimer = window.setTimeout(() => {
+    if (!session) {
+      return;
+    }
+    const snapshot: WorkSnapshot = {
+      content: session.store.result(),
+      whitespace: session.whitespace,
+      chunks: session.chunks.map((chunk) => {
+        const range = session!.store.centerRange(chunk.id);
+        return {
+          id: chunk.id,
+          state: chunk.state,
+          dismissedLeft: chunk.dismissedLeft,
+          dismissedRight: chunk.dismissedRight,
+          start: range.start,
+          end: range.end,
+        };
+      }),
+    };
+    post({ type: 'workSnapshot', payload: snapshot });
+  }, 1000);
+}
+
+/** The Restore/Discard offer for earlier unsaved work, in the confirm bar. */
+function offerRestore(snapshot: WorkSnapshot): void {
+  const bar = session?.layout.confirmBar;
+  if (!bar || !session) {
+    return;
+  }
+  const finish = (): void => {
+    bar.classList.add('mf-hidden');
+    bar.replaceChildren();
+  };
+  const text = document.createElement('span');
+  text.textContent = 'You have unsaved work on this merge from an earlier session.';
+  const restore = document.createElement('button');
+  restore.textContent = 'Restore';
+  restore.addEventListener('click', () => {
+    if (!session) {
+      return;
+    }
+    // The snapshot's chunk ids only line up under the mode it was taken in.
+    if (snapshot.whitespace !== session.whitespace) {
+      session.toolbar.setWhitespaceValue(snapshot.whitespace as WhitespaceMode);
+      buildSession(snapshot.whitespace as WhitespaceMode);
+    }
+    session.store.applyWorkSnapshot(snapshot);
+    finish();
+  });
+  const discard = document.createElement('button');
+  discard.textContent = 'Discard';
+  discard.addEventListener('click', () => {
+    post({ type: 'discardWork' });
+    finish();
+  });
+  bar.replaceChildren(text, restore, discard);
+  bar.classList.remove('mf-hidden');
 }
 
 /** Moves to the next or previous unresolved change and centers it in every pane. */
@@ -589,6 +657,8 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
     drawer?.showError(message.message, message.unconfigured === true);
   } else if (message.type === 'aiResolutions') {
     applyAiResolutions(message.resolutions, message.missing);
+  } else if (message.type === 'offerRestore') {
+    offerRestore(message.payload);
   }
 });
 

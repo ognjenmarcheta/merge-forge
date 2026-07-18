@@ -365,6 +365,47 @@ export class ChunkStore {
   result(): string {
     return this.model.getValue();
   }
+
+  /**
+   * Rehydrates a crash-safety snapshot: the saved result text plus every chunk's
+   * decision, as one undo step. Same full-document shape as `acceptAll`. Chunks are
+   * matched by id — the caller guarantees the snapshot was taken over identical
+   * inputs and the same whitespace mode, so ids line up.
+   */
+  applyWorkSnapshot(snapshot: {
+    content: string;
+    chunks: ReadonlyArray<{
+      id: number;
+      state: string;
+      dismissedLeft: boolean;
+      dismissedRight: boolean;
+      start: number;
+      end: number;
+    }>;
+  }): void {
+    this.applying = true;
+    try {
+      this.editor.pushUndoStop();
+      this.editor.executeEdits(EDIT_SOURCE, [
+        { range: this.model.getFullModelRange(), text: snapshot.content },
+      ]);
+      this.editor.pushUndoStop();
+      for (const saved of snapshot.chunks) {
+        const chunk = this.chunks.find((c) => c.id === saved.id);
+        if (!chunk) {
+          continue;
+        }
+        chunk.state = saved.state as Chunk['state'];
+        chunk.dismissedLeft = saved.dismissedLeft;
+        chunk.dismissedRight = saved.dismissedRight;
+        this.repin(chunk, saved.start, saved.end - saved.start);
+      }
+    } finally {
+      this.applying = false;
+    }
+    this.snapshot();
+    this.onChange();
+  }
 }
 
 /** Never let an edit at a chunk's edge silently swallow the neighbouring chunk. */

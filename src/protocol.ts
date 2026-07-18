@@ -31,6 +31,24 @@ export interface InitPayload {
 
 export type MergeAction = 'nextChange' | 'prevChange' | 'applyAllNonConflicting' | 'requestApply';
 
+// --- Crash-safety work snapshots ---------------------------------------------------
+
+/** A resumable picture of in-progress work: the result text plus every chunk's state. */
+export interface WorkSnapshot {
+  content: string;
+  /** The whitespace mode the chunks were computed under; restoring re-applies it. */
+  whitespace: string;
+  chunks: Array<{
+    id: number;
+    state: string;
+    dismissedLeft: boolean;
+    dismissedRight: boolean;
+    /** The chunk's center range at snapshot time (0-based half-open lines). */
+    start: number;
+    end: number;
+  }>;
+}
+
 // --- AI explain -------------------------------------------------------------------
 
 export interface ExplainConflict {
@@ -54,6 +72,7 @@ export type HostToWebviewMessage =
   | { type: 'init'; payload: InitPayload }
   | { type: 'runAction'; action: MergeAction }
   | { type: 'applyResult'; ok: boolean; error?: string }
+  | { type: 'offerRestore'; payload: WorkSnapshot }
   | { type: 'explainDelta'; text: string }
   | { type: 'explainDone'; truncated?: boolean }
   | { type: 'explainError'; message: string; unconfigured?: boolean }
@@ -82,6 +101,8 @@ export type WebviewToHostMessage =
   | { type: 'aiResolve'; payload: { request: ExplainRequest; explanation?: string } }
   | { type: 'explainCancel' }
   | { type: 'openAiSetup' }
+  | { type: 'workSnapshot'; payload: WorkSnapshot }
+  | { type: 'discardWork' }
   | { type: 'log'; level: 'warn' | 'error'; message: string };
 
 // --- Conflicts dialog (the file-list webview, separate bundle) ---------------------
