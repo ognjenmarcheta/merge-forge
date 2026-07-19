@@ -212,6 +212,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "eval": "node dev/eval/replay.mjs",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
     "vscode:prepublish": "pnpm run build",
     "package": "vsce package --no-dependencies"
