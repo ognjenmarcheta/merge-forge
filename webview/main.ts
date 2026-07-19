@@ -393,16 +393,21 @@ function buildAiRequest(onlyChunkId?: number): ExplainRequest | undefined {
     filePath: payload.filePath,
     languageId: payload.languageId,
     labels: payload.labels,
+    // The current result document — the model's rich baseline around the conflicts.
+    resultText: session.store.result(),
     conflicts: conflicts.map((chunk) => {
       const position = unresolved.indexOf(chunk);
       // Lines are terminator-inclusive, so joining with '' reconstructs the exact text.
       const texts = chunkTexts(chunk, payload.base, payload.left, payload.right);
+      const range = session!.store.centerRange(chunk.id);
       return {
         index: position + 1,
         chunkId: chunk.id,
         baseText: texts.base.join(''),
         leftText: texts.left.join(''),
         rightText: texts.right.join(''),
+        resultStart: range.start,
+        resultEnd: range.end,
       };
     }),
   };

@@ -89,7 +89,18 @@ const request: ExplainRequest = {
   filePath: 'src/a.ts',
   languageId: 'typescript',
   labels: { left: 'feature', right: 'main' },
-  conflicts: [{ index: 1, chunkId: 10, baseText: 'a\n', leftText: 'b\n', rightText: 'c\n' }],
+  resultText: 'b\n',
+  conflicts: [
+    {
+      index: 1,
+      chunkId: 10,
+      baseText: 'a\n',
+      leftText: 'b\n',
+      rightText: 'c\n',
+      resultStart: 0,
+      resultEnd: 1,
+    },
+  ],
 };
 
 function token(cancelled = false) {

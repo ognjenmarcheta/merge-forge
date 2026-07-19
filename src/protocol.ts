@@ -59,12 +59,17 @@ export interface ExplainConflict {
   baseText: string;
   leftText: string;
   rightText: string;
+  /** The conflict's location in `resultText` (0-based half-open lines), for context windows. */
+  resultStart: number;
+  resultEnd: number;
 }
 
 export interface ExplainRequest {
   filePath: string;
   languageId: string;
   labels: { left: string; right: string };
+  /** The current result document — the rich baseline the model reads around the conflicts. */
+  resultText: string;
   conflicts: ExplainConflict[];
 }
 
@@ -74,6 +79,8 @@ export type HostToWebviewMessage =
   | { type: 'applyResult'; ok: boolean; error?: string }
   | { type: 'offerRestore'; payload: WorkSnapshot }
   | { type: 'explainDelta'; text: string }
+  /** A live progress line while the model works its tools: "⚙ Read src/x.ts". */
+  | { type: 'explainActivity'; text: string }
   | { type: 'explainDone'; truncated?: boolean }
   | { type: 'explainError'; message: string; unconfigured?: boolean }
   | {
