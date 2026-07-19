@@ -153,3 +153,20 @@ The agentic quality round: the AI now sees the repository, not just the conflict
 - **Merge-replay eval** (`pnpm run eval`, dev-only, not shipped): replays real historical
   merges from any repo, runs the exact production pipeline, and scores the AI against the
   human's committed resolution — the regression check for every future prompt change.
+
+## 0.9.0 — unreleased
+
+Who is behind each conflict, and how the merge got here:
+
+- **Authorship chips**: each conflict's side panes show a small avatar at the chunk's
+  first line — the engineer who last shaped that side. Real GitHub avatars when the
+  identity is derivable (noreply emails + github.com origin), colored initials
+  otherwise — fully offline-safe and host-agnostic.
+- **Identity popover**: click a chip for name, relative date, commit subject and short
+  SHA, with "Open commit on GitHub" (works for any GitHub remote) and "Open GitHub
+  profile" (when the login is known), plus click-to-copy email. GitLab/no-remote repos
+  degrade to the local info with no dead links.
+- **History timeline**: a toolbar toggle (⟲) swaps the three panes for a chronological
+  two-lane view of the commits that produced this merge — yours left, theirs right,
+  newest first, merge base marked at the bottom. Click any commit for the same identity
+  popover; Esc returns to the merge with all state intact.
