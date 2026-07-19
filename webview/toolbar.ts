@@ -17,6 +17,8 @@ export interface ToolbarActions {
   fixAll: () => void;
   /** Swaps the panes for the chronological two-lane commit timeline, and back. */
   toggleHistory: () => void;
+  /** Soft-wraps long lines in all three panes, and back. */
+  toggleWrap: () => void;
 }
 
 export interface FooterActions {
@@ -73,11 +75,14 @@ function separator(): HTMLElement {
 }
 
 export interface Toolbar {
-  update: (chunks: readonly Chunk[]) => void;
+  /** `currentIndex` is the 1-based position of the current chunk, for "Change 2 of 6". */
+  update: (chunks: readonly Chunk[], currentIndex?: number) => void;
   /** Reverts the whitespace dropdown, for when the user cancels the recompute. */
   setWhitespaceValue: (mode: WhitespaceMode) => void;
   /** Marks the history toggle active while the timeline is shown. */
   setHistoryActive: (active: boolean) => void;
+  /** Marks the word-wrap toggle active. */
+  setWrapActive: (active: boolean) => void;
 }
 
 /** The JetBrains-style toolbar: nav, bulk-apply group, dropdowns, counter on the right. */
@@ -118,6 +123,7 @@ export function buildToolbar(
     'Show file history — who committed which change, and when',
     actions.toggleHistory,
   );
+  const wrap = iconButton('word-wrap', 'Toggle word wrap in all panes', actions.toggleWrap);
 
   const whitespace = select<WhitespaceMode>(
     'How whitespace differences are treated when comparing',
@@ -153,11 +159,12 @@ export function buildToolbar(
     separator(),
     whitespace,
     highlight,
+    wrap,
     counter,
   );
 
   return {
-    update(chunks) {
+    update(chunks, currentIndex) {
       const pending = chunks.filter((c) => c.state === 'initial');
       const nonConflicting = pending.filter((c) => c.kind !== 'conflict').length;
       const conflicts = pending.filter((c) => c.kind === 'conflict').length;
@@ -197,12 +204,20 @@ export function buildToolbar(
       } else if (pending.length === 0) {
         counter.textContent = '✓ All changes processed';
       } else {
-        // JetBrains phrasing: "6 changes. 1 conflict."
-        const parts = [`${pending.length} change${pending.length === 1 ? '' : 's'}.`];
-        if (conflicts > 0) {
-          parts.push(`${conflicts} conflict${conflicts === 1 ? '' : 's'}.`);
-        }
-        counter.textContent = parts.join(' ');
+        // With a current chunk: "Change 2 of 6 · 3 pending · 1 conflict".
+        // Otherwise the JetBrains phrasing: "6 changes. 1 conflict."
+        const parts =
+          currentIndex !== undefined
+            ? [
+                `Change ${currentIndex} of ${chunks.length}`,
+                `${pending.length} pending`,
+                ...(conflicts > 0 ? [`${conflicts} conflict${conflicts === 1 ? '' : 's'}`] : []),
+              ]
+            : [
+                `${pending.length} change${pending.length === 1 ? '' : 's'}.`,
+                ...(conflicts > 0 ? [`${conflicts} conflict${conflicts === 1 ? '' : 's'}.`] : []),
+              ];
+        counter.textContent = parts.join(currentIndex !== undefined ? ' · ' : ' ');
       }
     },
     setWhitespaceValue(mode) {
@@ -213,6 +228,9 @@ export function buildToolbar(
       history.title = active
         ? 'Back to the merge view (Esc)'
         : 'Show file history — who committed which change, and when';
+    },
+    setWrapActive(active) {
+      wrap.classList.toggle('mf-toggled', active);
     },
   };
 }

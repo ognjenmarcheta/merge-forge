@@ -137,7 +137,8 @@ function refresh(): void {
   );
   redrawConnectors();
   updateBaseLineNumbers(centerRanges);
-  session.toolbar.update(chunks);
+  const currentPosition = chunks.findIndex((c) => c.id === session!.currentChunkId);
+  session.toolbar.update(chunks, currentPosition >= 0 ? currentPosition + 1 : undefined);
   // WebStorm's completion card: floats over the result once nothing needs deciding,
   // and disappears again the moment any chunk reopens (e.g. via undo).
   const allProcessed = chunks.length > 0 && chunks.every((c) => c.state !== 'initial');
@@ -188,6 +189,21 @@ function redrawConnectors(): void {
   session.connectors.left.render(session.chunks, centerRanges, emphasis);
   session.connectors.right.render(session.chunks, centerRanges, emphasis);
   session.authorChips.render(session.chunks);
+}
+
+let wrapOn = false;
+
+/** Soft wrap in all three panes; geometry re-renders because line heights change. */
+function toggleWrap(): void {
+  if (!session) {
+    return;
+  }
+  wrapOn = !wrapOn;
+  for (const pane of [session.panes.left, session.panes.center, session.panes.right]) {
+    pane.updateOptions({ wordWrap: wrapOn ? 'on' : 'off' });
+  }
+  session.toolbar.setWrapActive(wrapOn);
+  redrawConnectors();
 }
 
 /** The history toggle: request data on open (host caches), restore panes on close. */
@@ -788,6 +804,7 @@ function start(payload: InitPayload): void {
     explain: requestExplain,
     fixAll: fixAllWithAi,
     toggleHistory,
+    toggleWrap,
   });
   historyView = createHistoryView(layout.historyHost, openAuthorPop);
   layout.doneAction.addEventListener('click', requestApply);

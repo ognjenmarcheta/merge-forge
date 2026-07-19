@@ -561,6 +561,24 @@ body.mf-light .mf-band-mod {
   stroke: rgba(21, 101, 192, 0.6);
 }
 
+/* Light theme: the 0.9 authorship + history elements. */
+body.mf-light .mf-author-chip {
+  border-color: rgba(0, 0, 0, 0.25);
+}
+
+body.mf-light .mf-author-pop,
+body.mf-light .mf-history-row {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+body.mf-light .mf-history-row {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+body.mf-light .mf-history-row:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
 body.mf-light .mf-zone-mod {
   background: repeating-linear-gradient(
     45deg,
