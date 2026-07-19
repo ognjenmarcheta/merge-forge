@@ -49,6 +49,47 @@ export interface WorkSnapshot {
   }>;
 }
 
+// --- Conflict authorship + history -------------------------------------------------
+
+/**
+ * A display-ready commit author. `src/git/authorship.ts`'s `Author` satisfies this
+ * shape structurally; it is restated here so the protocol stays import-free.
+ */
+export interface AuthorInfo {
+  sha: string;
+  shortSha: string;
+  name: string;
+  email: string;
+  /** Unix seconds. */
+  timestamp: number;
+  subject: string;
+  initials: string;
+  color: string;
+  avatarUrl?: string;
+  commitUrl?: string;
+  profileUrl?: string;
+}
+
+export interface TimelineEntryInfo extends AuthorInfo {
+  lane: 'yours' | 'theirs';
+}
+
+/** Per-conflict blame request: each side's line range in its own document. */
+export interface BlameRangeRequest {
+  chunkId: number;
+  leftStart: number;
+  leftEnd: number;
+  rightStart: number;
+  rightEnd: number;
+}
+
+export interface HistoryPayload {
+  /** Pre-interleaved newest-first; each entry carries its lane. */
+  entries: TimelineEntryInfo[];
+  mergeBase?: { sha: string; timestamp: number };
+  branches: { yours: string; theirs: string };
+}
+
 // --- AI explain -------------------------------------------------------------------
 
 export interface ExplainConflict {
@@ -88,7 +129,12 @@ export type HostToWebviewMessage =
       resolutions: Array<{ chunkId: number; text: string }>;
       /** Conflicts the model skipped or answered unparseably — they stay open. */
       missing: number;
-    };
+    }
+  | {
+      type: 'blameResult';
+      payload: Array<{ chunkId: number; left?: AuthorInfo; right?: AuthorInfo }>;
+    }
+  | { type: 'historyData'; payload: HistoryPayload };
 
 export interface StatePayload {
   totalChunks: number;
@@ -118,6 +164,8 @@ export type WebviewToHostMessage =
   | { type: 'openAiSetup' }
   | { type: 'workSnapshot'; payload: WorkSnapshot }
   | { type: 'discardWork' }
+  | { type: 'blame'; payload: { ranges: BlameRangeRequest[] } }
+  | { type: 'history' }
   | { type: 'log'; level: 'warn' | 'error'; message: string };
 
 // --- Conflicts dialog (the file-list webview, separate bundle) ---------------------

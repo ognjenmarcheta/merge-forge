@@ -25,7 +25,9 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     `script-src 'nonce-${nonce}'`,
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     `font-src ${webview.cspSource}`,
-    `img-src ${webview.cspSource} data:`,
+    // github.com/<login>.png (redirects to avatars.githubusercontent.com) serves
+    // the authorship chips; everything else stays local.
+    `img-src ${webview.cspSource} data: https://github.com https://avatars.githubusercontent.com`,
     `worker-src blob:`,
     `connect-src ${webview.cspSource}`,
   ].join('; ');

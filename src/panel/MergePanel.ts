@@ -20,13 +20,16 @@ import { parseResolutions } from '../ai/resolveParser';
 import { createToolExecutors } from '../ai/toolHost';
 import { branchSubjects, type BranchSubjects } from '../ai/toolHostNode';
 import { applyResolved } from '../git/applyResult';
+import { blameRanges, fileHistory, interleaveLanes } from '../git/authorship';
 import { listConflicted } from '../git/conflicts';
 import { loadMergeInputs, type UnsupportedReason } from '../git/loadMerge';
-import { findRepoRoot } from '../git/repoContext';
+import { detectOperation, findRepoRoot } from '../git/repoContext';
 import type { EolSetting } from '../merge/lineEndings';
 import type {
+  BlameRangeRequest,
   Eol,
   ExplainRequest,
+  HistoryPayload,
   HostToWebviewMessage,
   InitPayload,
   MergeAction,
@@ -48,6 +51,8 @@ export class MergePanel {
   private explainCancellation: vscode.CancellationTokenSource | undefined;
   /** Commit subjects unique to each side; computed once, they don't change mid-merge. */
   private subjects: BranchSubjects | undefined;
+  /** File history fetched once per session; the timeline can be toggled repeatedly. */
+  private history: HistoryPayload | undefined;
 
   static async createOrShow(context: vscode.ExtensionContext, uri: vscode.Uri): Promise<void> {
     const key = uri.toString();
@@ -217,6 +222,81 @@ export class MergePanel {
       case 'openAiSetup':
         void vscode.commands.executeCommand('mergeForge.setApiKey');
         break;
+      case 'blame':
+        void this.blame(message.payload.ranges);
+        break;
+      case 'history':
+        void this.sendHistory();
+        break;
+    }
+  }
+
+  /**
+   * Blames each conflict's side ranges against the side's committed rev. During a
+   * rebase/cherry-pick git's incoming ref is what the left ("yours") pane shows —
+   * the same swap `loadMergeInputs` applies to the pane contents.
+   */
+  private async blame(ranges: BlameRangeRequest[]): Promise<void> {
+    try {
+      const operation = await detectOperation(this.repoRoot);
+      const incoming =
+        operation.kind === 'cherry-pick'
+          ? 'CHERRY_PICK_HEAD'
+          : operation.kind === 'rebase'
+            ? 'REBASE_HEAD'
+            : 'MERGE_HEAD';
+      const [leftRev, rightRev] = operation.swapPresentation
+        ? [incoming, 'HEAD']
+        : ['HEAD', incoming];
+      const [left, right] = await Promise.all([
+        blameRanges(
+          this.repoRoot,
+          leftRev,
+          this.relativePath,
+          ranges.map((r) => ({ start: r.leftStart, end: r.leftEnd })),
+        ),
+        blameRanges(
+          this.repoRoot,
+          rightRev,
+          this.relativePath,
+          ranges.map((r) => ({ start: r.rightStart, end: r.rightEnd })),
+        ),
+      ]);
+      this.post({
+        type: 'blameResult',
+        payload: ranges.map((r, i) => ({
+          chunkId: r.chunkId,
+          ...(left.get(i) ? { left: left.get(i)! } : {}),
+          ...(right.get(i) ? { right: right.get(i)! } : {}),
+        })),
+      });
+    } catch {
+      // Authorship is an enrichment — a failure just means no chips.
+    }
+  }
+
+  private async sendHistory(): Promise<void> {
+    try {
+      if (!this.history) {
+        const history = await fileHistory(this.repoRoot, this.relativePath);
+        this.history = {
+          entries: interleaveLanes(history.yours, history.theirs),
+          ...(history.mergeBase ? { mergeBase: history.mergeBase } : {}),
+          branches: {
+            yours: this.payload.labels.left,
+            theirs: this.payload.labels.right,
+          },
+        };
+      }
+      this.post({ type: 'historyData', payload: this.history });
+    } catch {
+      this.post({
+        type: 'historyData',
+        payload: {
+          entries: [],
+          branches: { yours: this.payload.labels.left, theirs: this.payload.labels.right },
+        },
+      });
     }
   }
 
