@@ -43,6 +43,10 @@ beforeAll(async () => {
       }
       const wantsTruncation = body.includes('"model":"truncating-model"');
       const wantsResolution = body.includes('"model":"resolve-model"');
+      // Tool round-trip: first request answers with a tool call; the follow-up
+      // (recognizable by the tool-role message) answers with text.
+      const wantsToolCall =
+        body.includes('"model":"tool-model"') && !body.includes('"role":"tool"');
       res.writeHead(200, {
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache',
@@ -53,23 +57,46 @@ beforeAll(async () => {
         created: 1,
         model: 'stub',
       };
-      const chunks = wantsResolution
+      const chunks = wantsToolCall
         ? [
             {
               choices: [
-                { index: 0, delta: { role: 'assistant', content: '<<<RESOLVED 1>>>\nmer' } },
+                {
+                  index: 0,
+                  delta: {
+                    role: 'assistant',
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call_1',
+                        type: 'function',
+                        function: { name: 'searchCode', arguments: '{"query":"greet"}' },
+                      },
+                    ],
+                  },
+                  finish_reason: null,
+                },
               ],
             },
-            { choices: [{ index: 0, delta: { content: 'ged();\n<<<END 1>>>' } }] },
-            { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+            { choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] },
           ]
-        : wantsTruncation
-          ? SSE_CHUNKS.map((chunk) =>
-              chunk.choices[0]?.finish_reason === 'stop'
-                ? { choices: [{ index: 0, delta: {}, finish_reason: 'length' }] }
-                : chunk,
-            )
-          : SSE_CHUNKS;
+        : wantsResolution
+          ? [
+              {
+                choices: [
+                  { index: 0, delta: { role: 'assistant', content: '<<<RESOLVED 1>>>\nmer' } },
+                ],
+              },
+              { choices: [{ index: 0, delta: { content: 'ged();\n<<<END 1>>>' } }] },
+              { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+            ]
+          : wantsTruncation
+            ? SSE_CHUNKS.map((chunk) =>
+                chunk.choices[0]?.finish_reason === 'stop'
+                  ? { choices: [{ index: 0, delta: {}, finish_reason: 'length' }] }
+                  : chunk,
+              )
+            : SSE_CHUNKS;
       for (const chunk of chunks) {
         res.write(`data: ${JSON.stringify({ ...common, ...chunk })}\n\n`);
       }
@@ -113,12 +140,14 @@ function token(cancelled = false) {
 function collect() {
   const deltas: string[] = [];
   const events: string[] = [];
+  const activity: string[] = [];
   const callbacks: ExplainCallbacks = {
     onDelta: (text) => deltas.push(text),
+    onActivity: (text) => activity.push(text),
     onDone: (truncated) => events.push(truncated ? 'done:truncated' : 'done'),
     onError: (message) => events.push(`error:${message}`),
   };
-  return { deltas, events, callbacks };
+  return { deltas, events, activity, callbacks };
 }
 
 function model(modelId: string) {
@@ -200,5 +229,42 @@ describe('explainViaAiSdk against a local OpenAI-compatible stub', () => {
     // The resolve prompt reached the wire with the analysis context.
     expect(lastRequestBody).toContain('RESOLVED');
     expect(lastRequestBody).toContain('Combine both.');
+  });
+
+  test('tool round-trip: the model calls a tool, our executor answers, text follows', async () => {
+    const { deltas, events, activity, callbacks } = collect();
+    let searched = '';
+    await streamViaAiSdk(
+      model('tool-model'),
+      'Stub',
+      buildExplainPrompt(request, { toolsAvailable: true }),
+      callbacks,
+      token(),
+      {
+        executors: {
+          readFile: async () => 'unused',
+          searchCode: async ({ query }) => {
+            searched = query;
+            return `hits for ${query}`;
+          },
+          gitContext: async () => 'unused',
+          findSymbol: async () => 'unused',
+        },
+        stepBudget: 3,
+      },
+    );
+    // Our executor ran with the model's arguments…
+    expect(searched).toBe('greet');
+    // …the drawer got a live activity line…
+    expect(activity).toContain('⚙ Searched "greet"');
+    // …the tool result went back over the wire in the follow-up request…
+    expect(lastRequestBody).toContain('hits for greet');
+    expect(lastRequestBody).toContain('"role":"tool"');
+    // …and the loop finished with the second step's text answer.
+    expect(deltas.join('')).toBe('Hello world');
+    expect(events).toEqual(['done']);
+    // The request advertised the four tools.
+    expect(lastRequestBody).toContain('gitContext');
+    expect(lastRequestBody).toContain('findSymbol');
   });
 });

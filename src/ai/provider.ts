@@ -1,14 +1,27 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { APICallError, streamText, type LanguageModel } from 'ai';
+import {
+  APICallError,
+  jsonSchema,
+  stepCountIs,
+  streamText,
+  tool,
+  type LanguageModel,
+  type Tool,
+} from 'ai';
 import * as vscode from 'vscode';
 import { providerById, resolveModel, type ProviderSpec } from './providers';
+import { describeToolCall, runTool, TOOL_SPECS, type ToolExecutors } from './tools';
 
 /** A ready-to-send prompt; built by the callers (explain vs resolve) in prompt.ts. */
 export interface PromptPair {
   system: string;
   user: string;
 }
+
+/** Tool-loop step budgets: how many rounds of tool calls before we force an answer. */
+export const STEP_BUDGET_RESOLVE = 8;
+export const STEP_BUDGET_EXPLAIN = 4;
 
 /** Legacy secret name from the Anthropic-only release; still read as a fallback. */
 export const API_KEY_SECRET = 'mergeForge.anthropicKey';
@@ -20,18 +33,29 @@ export function secretKeyFor(providerId: string): string {
 
 export interface ExplainCallbacks {
   onDelta(text: string): void;
+  /** A tool-use progress line for the drawer: "⚙ Read src/x.ts". */
+  onActivity?(text: string): void;
   /** `truncated` is set when the model hit the output-token cap mid-answer. */
   onDone(truncated?: boolean): void;
   onError(message: string): void;
 }
 
+/** Enables the agentic tool loop for a request. */
+export interface StreamToolOptions {
+  executors: ToolExecutors;
+  stepBudget: number;
+}
+
 export type ExplainProvider =
   | {
       kind: 'vscode-lm' | 'api';
+      /** False when this backend cannot honor tool calls (older lm hosts). */
+      supportsTools: boolean;
       stream(
         prompt: PromptPair,
         callbacks: ExplainCallbacks,
         token: vscode.CancellationToken,
+        tools?: StreamToolOptions,
       ): Promise<void>;
     }
   | { kind: 'unconfigured' };
@@ -49,7 +73,8 @@ export async function getExplainProvider(
   if (lmModel) {
     return {
       kind: 'vscode-lm',
-      stream: (prompt, cb, token) => streamViaLm(lmModel, prompt, cb, token),
+      supportsTools: lmSupportsTools(),
+      stream: (prompt, cb, token, tools) => streamViaLm(lmModel, prompt, cb, token, tools),
     };
   }
   const configured = await configureApiModel(context);
@@ -58,8 +83,9 @@ export async function getExplainProvider(
   }
   return {
     kind: 'api',
-    stream: (prompt, cb, token) =>
-      streamViaAiSdk(configured.model, configured.label, prompt, cb, token),
+    supportsTools: true,
+    stream: (prompt, cb, token, tools) =>
+      streamViaAiSdk(configured.model, configured.label, prompt, cb, token, tools),
   };
 }
 
@@ -127,25 +153,79 @@ async function findLanguageModel(): Promise<vscode.LanguageModelChat | undefined
   }
 }
 
+/**
+ * Whether this host's Language Model API can round-trip tool calls. The classes
+ * arrived after our engine floor, so probe the namespace instead of assuming.
+ */
+export function lmSupportsTools(): boolean {
+  const ns = vscode as unknown as Record<string, unknown>;
+  return (
+    typeof ns['LanguageModelToolCallPart'] === 'function' &&
+    typeof ns['LanguageModelToolResultPart'] === 'function' &&
+    typeof ns['LanguageModelTextPart'] === 'function'
+  );
+}
+
 async function streamViaLm(
   model: vscode.LanguageModelChat,
   { system, user }: PromptPair,
   callbacks: ExplainCallbacks,
   token: vscode.CancellationToken,
+  tools?: StreamToolOptions,
 ): Promise<void> {
+  const toolOptions = tools !== undefined && lmSupportsTools() ? tools : undefined;
+  const lmTools: vscode.LanguageModelChatTool[] = TOOL_SPECS.map((spec) => ({
+    name: spec.name,
+    description: spec.description,
+    inputSchema: spec.inputSchema,
+  }));
   try {
     // The LM API has no system role at our floor version; prepend it to the user turn.
-    const response = await model.sendRequest(
-      [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${user}`)],
-      {},
-      token,
-    );
-    for await (const fragment of response.text) {
-      if (token.isCancellationRequested) {
+    const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${user}`)];
+    const budget = toolOptions ? toolOptions.stepBudget : 1;
+    for (let step = 0; step < budget; step++) {
+      // The last budgeted step withholds the tools so the model must answer.
+      const offerTools = toolOptions !== undefined && step < budget - 1;
+      const response = await model.sendRequest(
+        messages,
+        offerTools ? { tools: lmTools } : {},
+        token,
+      );
+      const toolCalls: vscode.LanguageModelToolCallPart[] = [];
+      let text = '';
+      for await (const part of response.stream) {
+        if (token.isCancellationRequested) {
+          return;
+        }
+        if (part instanceof vscode.LanguageModelTextPart) {
+          text += part.value;
+          callbacks.onDelta(part.value);
+        } else if (part instanceof vscode.LanguageModelToolCallPart) {
+          toolCalls.push(part);
+        }
+      }
+      if (toolCalls.length === 0 || toolOptions === undefined) {
+        callbacks.onDone();
         return;
       }
-      callbacks.onDelta(fragment);
+      // Echo the assistant turn (its text + calls), then answer each call in a
+      // User message — the shape the LM API prescribes for tool results.
+      const assistantParts: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart> =
+        text === '' ? [...toolCalls] : [new vscode.LanguageModelTextPart(text), ...toolCalls];
+      messages.push(vscode.LanguageModelChatMessage.Assistant(assistantParts));
+      const results: vscode.LanguageModelToolResultPart[] = [];
+      for (const call of toolCalls) {
+        callbacks.onActivity?.(describeToolCall(call.name, call.input));
+        const output = await runTool(toolOptions.executors, call.name, call.input);
+        results.push(
+          new vscode.LanguageModelToolResultPart(call.callId, [
+            new vscode.LanguageModelTextPart(output),
+          ]),
+        );
+      }
+      messages.push(vscode.LanguageModelChatMessage.User(results));
     }
+    // Every budgeted step ended in tool calls; the loop above never got an answer.
     callbacks.onDone();
   } catch (error) {
     if (token.isCancellationRequested) {
@@ -159,6 +239,23 @@ async function streamViaLm(
   }
 }
 
+/** Builds the AI SDK tool set: shared specs, activity lines emitted at call time. */
+function aiSdkTools(options: StreamToolOptions, callbacks: ExplainCallbacks): Record<string, Tool> {
+  const entries = TOOL_SPECS.map((spec) => [
+    spec.name,
+    tool({
+      description: spec.description,
+      inputSchema: jsonSchema(spec.inputSchema as Parameters<typeof jsonSchema>[0]),
+      // runTool never throws — failures return as text the model can read.
+      execute: (input: unknown) => {
+        callbacks.onActivity?.(describeToolCall(spec.name, input));
+        return runTool(options.executors, spec.name, input);
+      },
+    }),
+  ]);
+  return Object.fromEntries(entries) as Record<string, Tool>;
+}
+
 /** One streaming path for every API-key provider, via the AI SDK. */
 export async function streamViaAiSdk(
   model: LanguageModel,
@@ -166,6 +263,7 @@ export async function streamViaAiSdk(
   { system, user }: PromptPair,
   callbacks: ExplainCallbacks,
   token: vscode.CancellationToken,
+  toolOptions?: StreamToolOptions,
 ): Promise<void> {
   const controller = new AbortController();
   const cancellation = token.onCancellationRequested(() => controller.abort());
@@ -185,6 +283,13 @@ export async function streamViaAiSdk(
       // Generous cap: enough for many conflicts, but explicit so a hit is detectable.
       maxOutputTokens: 16000,
       abortSignal: controller.signal,
+      ...(toolOptions
+        ? {
+            tools: aiSdkTools(toolOptions, callbacks),
+            // +1: the budget counts tool rounds; the final step is the answer.
+            stopWhen: stepCountIs(toolOptions.stepBudget + 1),
+          }
+        : {}),
       // The AI SDK reports stream errors here rather than throwing from textStream.
       onError: ({ error }) => fail(error),
     });

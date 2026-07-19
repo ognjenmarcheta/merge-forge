@@ -1,9 +1,24 @@
 import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
 import * as vscode from 'vscode';
-import { buildChatPrompt, buildExplainPrompt, buildResolvePrompt } from '../ai/prompt';
-import { getExplainProvider, type ExplainProvider } from '../ai/provider';
+import {
+  buildChatPrompt,
+  buildExplainPrompt,
+  buildResolvePrompt,
+  buildRetryAddendum,
+  type PromptContext,
+} from '../ai/prompt';
+import {
+  getExplainProvider,
+  STEP_BUDGET_EXPLAIN,
+  STEP_BUDGET_RESOLVE,
+  type ExplainProvider,
+  type PromptPair,
+  type StreamToolOptions,
+} from '../ai/provider';
 import { parseResolutions } from '../ai/resolveParser';
+import { createToolExecutors } from '../ai/toolHost';
+import { branchSubjects, type BranchSubjects } from '../ai/toolHostNode';
 import { applyResolved } from '../git/applyResult';
 import { listConflicted } from '../git/conflicts';
 import { loadMergeInputs, type UnsupportedReason } from '../git/loadMerge';
@@ -31,6 +46,8 @@ export class MergePanel {
   private latestState: StatePayload | undefined;
   /** Cancels the in-flight AI explanation; recreated per request. */
   private explainCancellation: vscode.CancellationTokenSource | undefined;
+  /** Commit subjects unique to each side; computed once, they don't change mid-merge. */
+  private subjects: BranchSubjects | undefined;
 
   static async createOrShow(context: vscode.ExtensionContext, uri: vscode.Uri): Promise<void> {
     const key = uri.toString();
@@ -203,58 +220,96 @@ export class MergePanel {
     }
   }
 
+  /** The streaming callbacks every drawer-bound request shares. */
+  private drawerCallbacks(): {
+    onDelta(text: string): void;
+    onActivity(text: string): void;
+    onDone(truncated?: boolean): void;
+    onError(message: string): void;
+  } {
+    return {
+      onDelta: (text) => this.post({ type: 'explainDelta', text }),
+      onActivity: (text) => this.post({ type: 'explainActivity', text }),
+      onDone: (truncated) =>
+        this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
+      onError: (message) => this.post({ type: 'explainError', message }),
+    };
+  }
+
   /** Streams an AI explanation of the file's conflicts back into the webview drawer. */
   private async explain(request: ExplainRequest): Promise<void> {
-    const started = await this.startAiRequest();
+    const started = await this.startAiRequest(STEP_BUDGET_EXPLAIN);
     if (!started) {
       return;
     }
     await started.provider.stream(
-      buildExplainPrompt(request),
-      {
-        onDelta: (text) => this.post({ type: 'explainDelta', text }),
-        onDone: (truncated) =>
-          this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
-        onError: (message) => this.post({ type: 'explainError', message }),
-      },
+      buildExplainPrompt(request, started.context),
+      this.drawerCallbacks(),
       started.token,
+      started.tools,
     );
   }
 
   /**
    * "Resolve with AI": one request returns machine-parsed merged blocks; only what
    * parses is sent back — a skipped or garbled block just leaves that conflict open.
+   * One automatic retry covers indexes the first answer missed or garbled.
    */
   private async aiResolve(request: ExplainRequest, explanation?: string): Promise<void> {
-    const started = await this.startAiRequest();
+    const started = await this.startAiRequest(STEP_BUDGET_RESOLVE);
     if (!started) {
       return;
     }
-    let accumulated = '';
-    await started.provider.stream(
-      buildResolvePrompt(request, explanation),
-      {
-        onDelta: (text) => {
-          accumulated += text;
+    const base = buildResolvePrompt(request, explanation, started.context);
+    const collected = new Map<number, string>();
+    const expected = request.conflicts.map((c) => c.index);
+
+    const postResolutions = (): void => {
+      const resolutions = request.conflicts
+        .filter((c) => collected.has(c.index))
+        .map((c) => ({ chunkId: c.chunkId, text: collected.get(c.index)! }));
+      this.post({
+        type: 'aiResolutions',
+        resolutions,
+        missing: request.conflicts.length - resolutions.length,
+      });
+    };
+
+    const attempt = async (prompt: PromptPair, isRetry: boolean): Promise<void> => {
+      let accumulated = '';
+      await started.provider.stream(
+        prompt,
+        {
+          ...this.drawerCallbacks(),
+          onDelta: (text) => {
+            accumulated += text;
+          },
+          onDone: () => {
+            for (const [index, text] of parseResolutions(accumulated, expected)) {
+              if (!collected.has(index)) {
+                collected.set(index, text);
+              }
+            }
+            const missing = expected.filter((i) => !collected.has(i));
+            if (missing.length === 0 || isRetry || started.token.isCancellationRequested) {
+              postResolutions();
+              return;
+            }
+            this.post({
+              type: 'explainActivity',
+              text: `⚙ Retrying ${missing.length} unparsed conflict${missing.length === 1 ? '' : 's'}`,
+            });
+            void attempt(
+              { system: base.system, user: `${base.user}\n\n${buildRetryAddendum(missing)}` },
+              true,
+            );
+          },
         },
-        onDone: () => {
-          const byIndex = parseResolutions(
-            accumulated,
-            request.conflicts.map((c) => c.index),
-          );
-          const resolutions = request.conflicts
-            .filter((c) => byIndex.has(c.index))
-            .map((c) => ({ chunkId: c.chunkId, text: byIndex.get(c.index)! }));
-          this.post({
-            type: 'aiResolutions',
-            resolutions,
-            missing: request.conflicts.length - resolutions.length,
-          });
-        },
-        onError: (message) => this.post({ type: 'explainError', message }),
-      },
-      started.token,
-    );
+        started.token,
+        started.tools,
+      );
+    };
+    await attempt(base, false);
   }
 
   /** The drawer's follow-up chat — answers stream over the explain channel. */
@@ -263,27 +318,29 @@ export class MergePanel {
     history: Array<{ question: string; answer: string }>,
     question: string,
   ): Promise<void> {
-    const started = await this.startAiRequest();
+    const started = await this.startAiRequest(STEP_BUDGET_EXPLAIN);
     if (!started) {
       return;
     }
     await started.provider.stream(
-      buildChatPrompt(request, history, question),
-      {
-        onDelta: (text) => this.post({ type: 'explainDelta', text }),
-        onDone: (truncated) =>
-          this.post({ type: 'explainDone', ...(truncated ? { truncated: true } : {}) }),
-        onError: (message) => this.post({ type: 'explainError', message }),
-      },
+      buildChatPrompt(request, history, question, started.context),
+      this.drawerCallbacks(),
       started.token,
+      started.tools,
     );
   }
 
-  /** Shared preamble: cancel any in-flight request, resolve the backend, or report setup. */
-  private async startAiRequest(): Promise<
+  /**
+   * Shared preamble: cancel any in-flight request, resolve the backend (or report
+   * setup), and assemble the request's context — branch intent for the prompt,
+   * tool executors when the backend can honor them.
+   */
+  private async startAiRequest(stepBudget: number): Promise<
     | {
         provider: Exclude<ExplainProvider, { kind: 'unconfigured' }>;
         token: vscode.CancellationToken;
+        context: PromptContext;
+        tools: StreamToolOptions | undefined;
       }
     | undefined
   > {
@@ -302,7 +359,18 @@ export class MergePanel {
     if (cancellation.token.isCancellationRequested) {
       return undefined;
     }
-    return { provider, token: cancellation.token };
+    this.subjects ??= await branchSubjects(this.repoRoot).catch(() => ({
+      yours: [],
+      theirs: [],
+    }));
+    const context: PromptContext = {
+      subjects: this.subjects,
+      toolsAvailable: provider.supportsTools,
+    };
+    const tools = provider.supportsTools
+      ? { executors: createToolExecutors(this.repoRoot), stepBudget }
+      : undefined;
+    return { provider, token: cancellation.token, context, tools };
   }
 
   private cancelExplain(): void {
