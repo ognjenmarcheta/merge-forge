@@ -8,7 +8,19 @@ export type Panes = Record<PaneName, monaco.editor.IStandaloneCodeEditor>;
  * One fixed line height across all panes. Alignment and connector geometry both convert
  * line counts to pixels with this — it must match `paneOptions` exactly.
  */
-export const LINE_HEIGHT = 18;
+/**
+ * Line height in px — the unit all strip/chip geometry is computed in. Mutable
+ * (ESM live binding) because it scales with the user's editor font size; set
+ * once in `createPanes` before any geometry is drawn.
+ */
+export let LINE_HEIGHT = 18;
+
+/** The user's editor font, forwarded from the host so panes match their editor. */
+export interface PaneFont {
+  size: number;
+  family: string;
+  ligatures: boolean;
+}
 
 /**
  * Options shared by all three panes.
@@ -17,7 +29,10 @@ export const LINE_HEIGHT = 18;
  * vertical space; that only holds if every pane agrees on line height. Word wrap and
  * folding would break the line↔pixel correspondence, so both stay off.
  */
-function paneOptions(readOnly: boolean): monaco.editor.IStandaloneEditorConstructionOptions {
+function paneOptions(
+  readOnly: boolean,
+  font?: PaneFont,
+): monaco.editor.IStandaloneEditorConstructionOptions {
   return {
     theme: THEME_NAME,
     readOnly,
@@ -42,7 +57,9 @@ function paneOptions(readOnly: boolean): monaco.editor.IStandaloneEditorConstruc
       horizontal: 'auto',
       handleMouseWheel: true,
     },
-    fontSize: 12,
+    fontSize: font?.size ?? 12,
+    ...(font?.family ? { fontFamily: font.family } : {}),
+    fontLigatures: font?.ligatures ?? false,
     lineHeight: LINE_HEIGHT,
   };
 }
@@ -52,10 +69,16 @@ export function createPanes(
   hosts: Record<PaneName, HTMLElement>,
   content: Record<PaneName, string>,
   languageId: string,
+  font?: PaneFont,
 ): Panes {
+  // All strip/chip geometry derives from LINE_HEIGHT — scale it with the font
+  // before any editor exists so every consumer sees one consistent value.
+  if (font) {
+    LINE_HEIGHT = Math.max(16, Math.round(font.size * 1.5));
+  }
   const make = (name: PaneName): monaco.editor.IStandaloneCodeEditor =>
     monaco.editor.create(hosts[name], {
-      ...paneOptions(name !== 'center'),
+      ...paneOptions(name !== 'center', font),
       model: monaco.editor.createModel(content[name], languageId),
     });
   return { left: make('left'), center: make('center'), right: make('right') };

@@ -26,7 +26,11 @@ export interface InitPayload {
   right: string;
   labels: { left: string; right: string };
   eol: EolInfo;
-  settings: { autoApplyNonConflicting: boolean };
+  settings: {
+    autoApplyNonConflicting: boolean;
+    /** The user's editor font, so the panes match their code everywhere else. */
+    font?: { size: number; family: string; ligatures: boolean };
+  };
 }
 
 export type MergeAction = 'nextChange' | 'prevChange' | 'applyAllNonConflicting' | 'requestApply';

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { loadMergeInputs } from '../src/git/loadMerge';
+import { contentGuard, loadMergeInputs, MAX_MERGE_BYTES } from '../src/git/loadMerge';
 
 const scriptPath = fileURLToPath(new URL('../scripts/make-conflict-repo.mjs', import.meta.url));
 
@@ -75,5 +75,34 @@ describe('loadMergeInputs', () => {
   test('honors an explicit line-ending setting over the local side', async () => {
     const { payload } = await loadMergeInputs(repo, 'crlf.txt', 'lf');
     expect(payload.eol.suggested).toBe('lf');
+  });
+});
+
+describe('contentGuard', () => {
+  const text = Buffer.from('ordinary text\nwith lines\n', 'utf8');
+
+  test('plain text passes', () => {
+    expect(contentGuard({ ours: text, theirs: text, base: text })).toBeUndefined();
+  });
+
+  test('a NUL byte on any side reads as binary', () => {
+    const binary = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]);
+    expect(contentGuard({ ours: binary, theirs: text, base: text })).toBe('binary');
+    expect(contentGuard({ ours: text, theirs: binary, base: text })).toBe('binary');
+    expect(contentGuard({ ours: text, theirs: text, base: binary })).toBe('binary');
+  });
+
+  test('any side over the size cap reads as tooLarge', () => {
+    const huge = Buffer.alloc(MAX_MERGE_BYTES + 1, 0x61);
+    expect(contentGuard({ ours: huge, theirs: text, base: text })).toBe('tooLarge');
+  });
+
+  test('missing sides (delete/modify, both-added) are simply not checked', () => {
+    expect(contentGuard({ ours: text })).toBeUndefined();
+  });
+
+  test('binary wins over tooLarge so the message names the real problem', () => {
+    const hugeBinary = Buffer.alloc(MAX_MERGE_BYTES + 1, 0x00);
+    expect(contentGuard({ ours: hugeBinary })).toBe('binary');
   });
 });

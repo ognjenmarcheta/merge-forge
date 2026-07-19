@@ -5,7 +5,36 @@ import { detectOperation, getMergeBranches } from './repoContext';
 import { readStages } from './stages';
 
 /** Why a conflicted file cannot be opened in the three-pane editor. */
-export type UnsupportedReason = 'deletedByThem' | 'deletedByUs';
+export type UnsupportedReason = 'deletedByThem' | 'deletedByUs' | 'binary' | 'tooLarge';
+
+/** Above this per-side size the editor would ruin the session, not help it. */
+export const MAX_MERGE_BYTES = 10 * 1024 * 1024;
+
+/** git's own heuristic: a NUL byte in the leading bytes means binary. */
+function looksBinary(buffer: Buffer): boolean {
+  return buffer.subarray(0, 8000).includes(0);
+}
+
+/**
+ * Refuses content the three-pane editor cannot meaningfully merge: binary blobs
+ * (checked first — a huge binary should say "binary") and giant files.
+ */
+export function contentGuard(stages: {
+  ours?: Buffer;
+  theirs?: Buffer;
+  base?: Buffer;
+}): UnsupportedReason | undefined {
+  const present = [stages.ours, stages.theirs, stages.base].filter(
+    (b): b is Buffer => b !== undefined,
+  );
+  if (present.some(looksBinary)) {
+    return 'binary';
+  }
+  if (present.some((b) => b.length > MAX_MERGE_BYTES)) {
+    return 'tooLarge';
+  }
+  return undefined;
+}
 
 export interface MergeInputs {
   payload: InitPayload;
@@ -51,6 +80,15 @@ export async function loadMergeInputs(
   }
   if (!theirs) {
     return { payload: emptyPayload(relativePath), hadBom: false, unsupported: 'deletedByThem' };
+  }
+
+  const guarded = contentGuard({
+    ours: yours,
+    theirs,
+    ...(stages.base ? { base: stages.base } : {}),
+  });
+  if (guarded) {
+    return { payload: emptyPayload(relativePath), hadBom: false, unsupported: guarded };
   }
 
   const rawLeft = yours.toString('utf8');

@@ -738,6 +738,7 @@ function start(payload: InitPayload): void {
     layout.hosts,
     { left: payload.left, center: payload.base, right: payload.right },
     payload.languageId,
+    payload.settings.font,
   );
 
   const chunks = computeChunks(payload.base, payload.left, payload.right);

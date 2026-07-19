@@ -4,6 +4,7 @@ import { PROVIDERS, resolveModel, type ProviderSpec } from './ai/providers';
 import { listConflicted } from './git/conflicts';
 import { detectOperation } from './git/repoContext';
 import { readStages } from './git/stages';
+import { getOutputChannel } from './log';
 import { ConflictsPanel } from './panel/ConflictsPanel';
 import { MergePanel } from './panel/MergePanel';
 import { ConflictCodeLensProvider } from './ui/codeLens';
@@ -224,7 +225,7 @@ function readAutoShow(): boolean {
  * checked by hand against a real conflicted repository.
  */
 async function showDiagnostics(context: vscode.ExtensionContext): Promise<void> {
-  const channel = vscode.window.createOutputChannel('Merge Forge');
+  const channel = getOutputChannel();
   context.subscriptions.push(channel);
   channel.show(true);
 

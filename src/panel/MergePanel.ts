@@ -23,6 +23,7 @@ import { applyResolved } from '../git/applyResult';
 import { blameRanges, fileHistory, interleaveLanes } from '../git/authorship';
 import { listConflicted } from '../git/conflicts';
 import { loadMergeInputs, type UnsupportedReason } from '../git/loadMerge';
+import { getOutputChannel } from '../log';
 import { detectOperation, findRepoRoot } from '../git/repoContext';
 import type { EolSetting } from '../merge/lineEndings';
 import type {
@@ -105,7 +106,7 @@ export class MergePanel {
       ...inputs.payload,
       filePath: relativePath,
       languageId: await detectLanguageId(uri),
-      settings: { autoApplyNonConflicting: readAutoApply() },
+      settings: { autoApplyNonConflicting: readAutoApply(), font: readEditorFont() },
     };
     // Fingerprint of the three inputs: stale saved work (index moved on) never matches.
     const inputsHash = createHash('sha1')
@@ -202,6 +203,10 @@ export class MergePanel {
         void this.abort();
         break;
       case 'log':
+        // The output channel is where users can actually see this; console mirrors for dev.
+        getOutputChannel().appendLine(
+          `[${message.level}] ${this.relativePath}: ${message.message}`,
+        );
         console[message.level === 'error' ? 'error' : 'warn'](`[merge-forge] ${message.message}`);
         break;
       case 'apply':
@@ -572,6 +577,16 @@ function readAutoAdvance(): boolean {
   return vscode.workspace.getConfiguration('mergeForge').get<boolean>('autoAdvance', false);
 }
 
+/** The user's editor font — the panes should feel like their editor, not ours. */
+function readEditorFont(): { size: number; family: string; ligatures: boolean } {
+  const editor = vscode.workspace.getConfiguration('editor');
+  return {
+    size: editor.get<number>('fontSize', 12),
+    family: editor.get<string>('fontFamily', ''),
+    ligatures: editor.get<boolean | string>('fontLigatures', false) === true,
+  };
+}
+
 /** Reuses VS Code's own filename→language mapping, which Monaco's ids line up with. */
 async function detectLanguageId(uri: vscode.Uri): Promise<string> {
   try {
@@ -586,6 +601,20 @@ async function detectLanguageId(uri: vscode.Uri): Promise<string> {
  * all — so offer the only two decisions that exist instead of an empty editor.
  */
 async function showUnsupported(reason: UnsupportedReason, relativePath: string): Promise<void> {
+  if (reason === 'binary') {
+    void vscode.window.showWarningMessage(
+      `Merge Forge: "${relativePath}" is a binary file — there is no line-by-line merge to show. ` +
+        'Pick a side from the Source Control view, or resolve it with `git checkout --ours/--theirs`.',
+    );
+    return;
+  }
+  if (reason === 'tooLarge') {
+    void vscode.window.showWarningMessage(
+      `Merge Forge: "${relativePath}" is over 10 MB — too large for the visual merge editor. ` +
+        'Resolve it in a plain editor or from the command line.',
+    );
+    return;
+  }
   const deletedBy = reason === 'deletedByThem' ? 'the incoming branch' : 'your branch';
   void vscode.window.showWarningMessage(
     `Merge Forge: "${relativePath}" was deleted by ${deletedBy} and modified on the other side. ` +
