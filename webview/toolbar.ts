@@ -15,6 +15,8 @@ export interface ToolbarActions {
   explain: () => void;
   /** Everything in one click: safe changes mechanically, conflicts via AI. */
   fixAll: () => void;
+  /** Swaps the panes for the chronological two-lane commit timeline, and back. */
+  toggleHistory: () => void;
 }
 
 export interface FooterActions {
@@ -74,6 +76,8 @@ export interface Toolbar {
   update: (chunks: readonly Chunk[]) => void;
   /** Reverts the whitespace dropdown, for when the user cancels the recompute. */
   setWhitespaceValue: (mode: WhitespaceMode) => void;
+  /** Marks the history toggle active while the timeline is shown. */
+  setHistoryActive: (active: boolean) => void;
 }
 
 /** The JetBrains-style toolbar: nav, bulk-apply group, dropdowns, counter on the right. */
@@ -109,6 +113,11 @@ export function buildToolbar(
     'Fix all with AI — apply safe changes, AI-resolve conflicts',
     actions.fixAll,
   );
+  const history = iconButton(
+    'history',
+    'Show file history — who committed which change, and when',
+    actions.toggleHistory,
+  );
 
   const whitespace = select<WhitespaceMode>(
     'How whitespace differences are treated when comparing',
@@ -140,6 +149,7 @@ export function buildToolbar(
     separator(),
     explain,
     fixAll,
+    history,
     separator(),
     whitespace,
     highlight,
@@ -197,6 +207,12 @@ export function buildToolbar(
     },
     setWhitespaceValue(mode) {
       whitespace.value = mode;
+    },
+    setHistoryActive(active) {
+      history.classList.toggle('mf-toggled', active);
+      history.title = active
+        ? 'Back to the merge view (Esc)'
+        : 'Show file history — who committed which change, and when';
     },
   };
 }

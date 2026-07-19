@@ -19,6 +19,7 @@ import { Connectors } from './connectors';
 import { renderDecorations, type ChunkWordRanges } from './decorations';
 import { createPanes, type Panes } from './editors';
 import { createExplainDrawer, type ExplainDrawer } from './explainDrawer';
+import { createHistoryView, type HistoryView } from './historyView';
 import { buildLayout } from './layout';
 import { configureMonacoWorker } from './monaco';
 import type { monaco } from './monaco';
@@ -70,6 +71,9 @@ interface Session {
 
 let session: Session | undefined;
 let drawer: ExplainDrawer | undefined;
+let historyView: HistoryView | undefined;
+/** Set while a history request is in flight, so the answer opens the view once. */
+let historyPending = false;
 let cursor = -1;
 let flashTimer: number | undefined;
 /** Last applied base↔center mapping, so the margin only repaints when ranges move. */
@@ -184,6 +188,32 @@ function redrawConnectors(): void {
   session.connectors.left.render(session.chunks, centerRanges, emphasis);
   session.connectors.right.render(session.chunks, centerRanges, emphasis);
   session.authorChips.render(session.chunks);
+}
+
+/** The history toggle: request data on open (host caches), restore panes on close. */
+function toggleHistory(): void {
+  if (!session || !historyView) {
+    return;
+  }
+  if (historyView.isOpen) {
+    historyView.hide();
+    session.layout.panesRow.classList.remove('mf-hidden');
+    session.toolbar.setHistoryActive(false);
+    redrawConnectors();
+    return;
+  }
+  historyPending = true;
+  post({ type: 'history' });
+}
+
+function showHistory(payload: Parameters<HistoryView['show']>[0]): void {
+  if (!session || !historyView || !historyPending) {
+    return;
+  }
+  historyPending = false;
+  historyView.show(payload);
+  session.layout.panesRow.classList.add('mf-hidden');
+  session.toolbar.setHistoryActive(true);
 }
 
 /** Asks the host to blame each conflict's side ranges; chips render on the answer. */
@@ -756,7 +786,9 @@ function start(payload: InitPayload): void {
     },
     explain: requestExplain,
     fixAll: fixAllWithAi,
+    toggleHistory,
   });
+  historyView = createHistoryView(layout.historyHost, openAuthorPop);
   layout.doneAction.addEventListener('click', requestApply);
   buildFooter(layout.footer, {
     acceptLeft: () => session?.store.acceptAll('left', session.payload.left),
@@ -867,6 +899,8 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
   } else if (message.type === 'blameResult') {
     session?.authorChips.setData(message.payload);
     redrawConnectors();
+  } else if (message.type === 'historyData') {
+    showHistory(message.payload);
   } else if (message.type === 'offerRestore') {
     offerRestore(message.payload);
   }
@@ -882,6 +916,15 @@ window.addEventListener(
       event.preventDefault();
       closeAiMenu();
       closeAuthorPop();
+      return;
+    }
+    if (event.key === 'Escape' && historyView?.isOpen) {
+      event.preventDefault();
+      toggleHistory();
+      return;
+    }
+    // Chunk navigation acts on editors the history view is covering — hold it off.
+    if (historyView?.isOpen) {
       return;
     }
     if (event.key === 'F7') {

@@ -13,6 +13,10 @@ export interface Layout {
   /** Gutter strips: `leftStrip` sits between the left and center panes. */
   leftStrip: HTMLElement;
   rightStrip: HTMLElement;
+  /** The three-pane row, hidden as a whole while the history timeline is shown. */
+  panesRow: HTMLElement;
+  /** Host for the history timeline view, swapped in for the panes. */
+  historyHost: HTMLElement;
   footer: HTMLElement;
   /** Floating "all changes processed" card over the result pane. */
   doneCard: HTMLElement;
@@ -48,6 +52,7 @@ export function buildLayout(
   const counter = element('div', 'mf-counter');
   const explainHost = element('div', 'mf-explain mf-hidden');
   const panes = element('div', 'mf-panes');
+  const historyHost = element('div', 'mf-history mf-hidden');
   const footer = element('div', 'mf-footer');
 
   // JetBrains headers: the sides say where the changes come from; the middle is yours.
@@ -66,7 +71,7 @@ export function buildLayout(
   center.pane.append(doneCard);
 
   panes.append(left.pane, leftStrip, center.pane, rightStrip, right.pane);
-  root.replaceChildren(banner, confirmBar, toolbar, explainHost, panes, footer);
+  root.replaceChildren(banner, confirmBar, toolbar, explainHost, panes, historyHost, footer);
 
   return {
     root,
@@ -78,6 +83,8 @@ export function buildLayout(
     hosts: { left: left.host, center: center.host, right: right.host },
     leftStrip,
     rightStrip,
+    panesRow: panes,
+    historyHost,
     footer,
     doneCard,
     doneAction,

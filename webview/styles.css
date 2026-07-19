@@ -883,6 +883,111 @@ body.mf-light .mf-explain-body li code {
   opacity: 1;
 }
 
+/* --- history timeline --------------------------------------------------------- */
+
+.mf-history {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mf-history.mf-hidden {
+  display: none;
+}
+
+.mf-history-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  font-weight: 600;
+  font-size: 0.92em;
+}
+
+.mf-history-branch-yours {
+  color: var(--vscode-charts-blue, #3794ff);
+}
+
+.mf-history-branch-theirs {
+  color: var(--vscode-charts-purple, #b180d7);
+}
+
+.mf-history-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 8px 14px;
+  overflow-y: auto;
+  gap: 4px;
+}
+
+/* One chronological column; the lane decides which half a row leans into. */
+.mf-history-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 55%;
+  padding: 5px 10px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.06));
+  color: var(--vscode-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mf-history-row:hover {
+  border-color: var(--vscode-focusBorder, #4daafc);
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+.mf-history-yours {
+  align-self: flex-start;
+  border-left: 3px solid var(--vscode-charts-blue, #3794ff);
+}
+
+.mf-history-theirs {
+  align-self: flex-end;
+  border-right: 3px solid var(--vscode-charts-purple, #b180d7);
+}
+
+.mf-history-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mf-history-subject {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mf-history-meta {
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+
+.mf-history-empty {
+  opacity: 0.7;
+  padding: 12px;
+}
+
+.mf-history-base {
+  padding: 6px 14px;
+  border-top: 1px dashed var(--vscode-panel-border, rgba(128, 128, 128, 0.4));
+  opacity: 0.75;
+  text-align: center;
+  font-size: 0.88em;
+}
+
+.mf-toolbar button.mf-toggled {
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+}
+
 /* --- per-chunk AI menu ------------------------------------------------------- */
 
 .mf-ai-menu {
