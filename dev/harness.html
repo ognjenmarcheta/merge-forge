@@ -179,10 +179,40 @@
               type: 'historyData',
               payload: {
                 entries: [
-                  { ...author('Jana Doe', 'JD', '#4e79a7', 'feat: add unit selector to metric modal', 1), lane: 'yours' },
-                  { ...author('Alex Behm', 'AB', '#e15759', 'refactor: rename metric props across components', 2), lane: 'theirs' },
-                  { ...author('Jana Doe', 'JD', '#4e79a7', 'fix: metric rounding for imperial units', 4), lane: 'yours' },
-                  { ...author('Sam Ito', 'SI', '#59a14f', 'chore: bump chart dependencies', 6), lane: 'theirs' },
+                  {
+                    ...author(
+                      'Jana Doe',
+                      'JD',
+                      '#4e79a7',
+                      'feat: add unit selector to metric modal',
+                      1,
+                    ),
+                    lane: 'yours',
+                  },
+                  {
+                    ...author(
+                      'Alex Behm',
+                      'AB',
+                      '#e15759',
+                      'refactor: rename metric props across components',
+                      2,
+                    ),
+                    lane: 'theirs',
+                  },
+                  {
+                    ...author(
+                      'Jana Doe',
+                      'JD',
+                      '#4e79a7',
+                      'fix: metric rounding for imperial units',
+                      4,
+                    ),
+                    lane: 'yours',
+                  },
+                  {
+                    ...author('Sam Ito', 'SI', '#59a14f', 'chore: bump chart dependencies', 6),
+                    lane: 'theirs',
+                  },
                 ],
                 mergeBase: { sha: '9'.repeat(40), timestamp: now - 21 * 86400 },
                 branches: { yours: 'feature/metrics', theirs: 'main' },

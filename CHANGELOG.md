@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.0 — 2026-07-19
+
+First stable release. MergeForge is a JetBrains-style three-pane merge resolver for
+VS Code and Cursor:
+
+- **The editor**: three scroll-synced panes, per-chunk »/«/× gutter controls with
+  connector bands, wand for non-conflicting changes, Magic Resolve, word-level diff,
+  base line numbers, full undo, byte-exact git parity where git merges cleanly.
+- **AI assistant** on Copilot's Language Model API or your own key (Anthropic, OpenAI,
+  DeepSeek, Kimi, any OpenAI-compatible endpoint): explain, resolve, fix-all, and chat —
+  agentic, with read-only repo tools, rich file+branch-intent context, live activity
+  lines, and a replay eval for regression-checking prompt changes.
+- **Authorship & history**: blame chips on every conflict side with GitHub click-through,
+  and a two-lane chronological timeline of the merge.
+- **Workflow**: Conflicts dialog, status-bar merge cluster, next-file loop, crash-safety
+  snapshots, rebase/cherry-pick stage swapping, delete/modify handling.
+- **1.0 hardening**: your editor font in the panes, binary/huge-file guards, output-channel
+  logging, first-run walkthrough, extension icon, CI.
+
+Pre-release milestone notes follow.
+
 ## 0.1.0 — unreleased
 
 First working version: a JetBrains-style three-pane merge conflict resolver.

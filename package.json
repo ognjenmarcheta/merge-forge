@@ -2,10 +2,15 @@
   "name": "merge-forge",
   "displayName": "MergeForge — JetBrains-style Conflict Resolver",
   "description": "Resolve Git merge conflicts in a JetBrains/WebStorm-style three-pane visual merge editor.",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "publisher": "ognjenmarcheta",
   "license": "MIT",
   "private": true,
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#16171f",
+    "theme": "dark"
+  },
   "packageManager": "pnpm@9.12.3",
   "engines": {
     "vscode": "^1.90.0",
@@ -121,6 +126,48 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "mergeForge.gettingStarted",
+        "title": "Resolve merges the JetBrains way",
+        "description": "Three panes, gutter arrows, and an AI that reads your repo.",
+        "steps": [
+          {
+            "id": "openConflict",
+            "title": "Open a conflicted file",
+            "description": "When a merge or rebase hits conflicts, the Conflicts dialog opens automatically — or pick a file yourself.\n[Open a Conflicted File](command:mergeForge.resolve)",
+            "media": {
+              "image": "media/hero.png",
+              "altText": "The three-pane merge editor"
+            },
+            "completionEvents": [
+              "onCommand:mergeForge.resolve"
+            ]
+          },
+          {
+            "id": "resolveChunks",
+            "title": "Resolve with the gutter controls",
+            "description": "Click » or « to accept a side, × to ignore it, or the wand to apply everything non-conflicting. F7 steps through changes; the result pane is fully editable.",
+            "media": {
+              "image": "media/hero.png",
+              "altText": "Gutter arrows and connector bands"
+            }
+          },
+          {
+            "id": "setupAi",
+            "title": "Set up the AI assistant",
+            "description": "With GitHub Copilot it works out of the box. Otherwise pick a provider and paste a key — then ✦ explains conflicts and ▶ fixes the whole file.\n[Set AI Provider & Key](command:mergeForge.setApiKey)",
+            "media": {
+              "image": "media/ai.png",
+              "altText": "AI explanation with live tool activity"
+            },
+            "completionEvents": [
+              "onCommand:mergeForge.setApiKey"
+            ]
+          }
+        ]
+      }
+    ],
     "keybindings": [
       {
         "command": "mergeForge.nextChange",
