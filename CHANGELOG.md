@@ -132,3 +132,24 @@ The workflow-loop and per-chunk AI round:
   only the red conflicts go to the AI. Combined report in the drawer: "Resolved 2 of 2
   conflicts + applied 3 non-conflicting changes — review the result; Cmd+Z reverts."
   Everything stays individually undoable, and nothing touches git until Apply.
+
+## 0.8.0 — unreleased
+
+The agentic quality round: the AI now sees the repository, not just the conflict lines.
+
+- **Rich baseline context**: every AI request carries the current result document
+  (whole file when small, windows around each conflict when large) and each branch's
+  commit subjects ("Branch intent") — the model reads the why before deciding the how.
+- **Agentic tools** on both backends (VS Code Language Model API where tool calls are
+  supported, and every API-key provider via the AI SDK): `readFile`, `searchCode`
+  (git grep over tracked files), `gitContext` (per-side commit history + diffs), and
+  `findSymbol` (language services). All read-only, workspace-rooted, output-capped,
+  with hard step budgets (8 for resolve, 4 for explain/chat) and cancellation.
+- **Live activity lines** in the drawer while the model works: "⚙ Read src/utils/date.ts",
+  "⚙ Searched \"formatMetric\"" — the wait shows its work, and the trail persists above
+  the final report.
+- **Automatic retry**: a resolve whose output has missing or unparseable blocks gets one
+  re-ask scoped to the failed conflicts before reporting.
+- **Merge-replay eval** (`pnpm run eval`, dev-only, not shipped): replays real historical
+  merges from any repo, runs the exact production pipeline, and scores the AI against the
+  human's committed resolution — the regression check for every future prompt change.
