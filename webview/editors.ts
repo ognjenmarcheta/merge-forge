@@ -29,7 +29,9 @@ function paneOptions(readOnly: boolean): monaco.editor.IStandaloneEditorConstruc
     scrollBeyondLastLine: false,
     minimap: { enabled: false },
     lineNumbersMinChars: 3,
-    glyphMargin: false,
+    // Side panes reserve the glyph lane for the authorship chips; the editable
+    // result keeps its full width.
+    glyphMargin: readOnly,
     // Chunk decorations paint scrollbar marks (WebStorm's right-edge stripes).
     overviewRulerLanes: 2,
     overviewRulerBorder: false,

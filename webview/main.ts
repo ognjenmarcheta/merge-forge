@@ -4,6 +4,7 @@ import { computeChunks, splitLines, type WhitespaceMode } from '../src/merge/eng
 import { chunkTexts, nonConflictingAction, sideControls } from '../src/merge/resolve';
 import { wordHighlights } from '../src/merge/wordDiff';
 import type {
+  AuthorInfo,
   Eol,
   ExplainRequest,
   HostToWebviewMessage,
@@ -13,6 +14,7 @@ import type {
   WorkSnapshot,
 } from '../src/protocol';
 import { baseLineNumbers, computeSegments, computeSpacers } from './alignment';
+import { AuthorChips, chipContent, relativeDate } from './authorChips';
 import { Connectors } from './connectors';
 import { renderDecorations, type ChunkWordRanges } from './decorations';
 import { createPanes, type Panes } from './editors';
@@ -54,6 +56,7 @@ interface Session {
   whitespace: WhitespaceMode;
   highlight: HighlightMode;
   connectors: { left: Connectors; right: Connectors };
+  authorChips: AuthorChips;
   collections: Record<PaneName, monaco.editor.IEditorDecorationsCollection>;
   zoneIds: ReturnType<typeof emptyZoneIds>;
   toolbar: Toolbar;
@@ -180,6 +183,26 @@ function redrawConnectors(): void {
   };
   session.connectors.left.render(session.chunks, centerRanges, emphasis);
   session.connectors.right.render(session.chunks, centerRanges, emphasis);
+  session.authorChips.render(session.chunks);
+}
+
+/** Asks the host to blame each conflict's side ranges; chips render on the answer. */
+function requestBlame(): void {
+  if (!session) {
+    return;
+  }
+  const ranges = session.chunks
+    .filter((chunk) => chunk.kind === 'conflict')
+    .map((chunk) => ({
+      chunkId: chunk.id,
+      leftStart: chunk.left.start,
+      leftEnd: chunk.left.end,
+      rightStart: chunk.right.start,
+      rightEnd: chunk.right.end,
+    }));
+  if (ranges.length > 0) {
+    post({ type: 'blame', payload: { ranges } });
+  }
 }
 
 function postState(): void {
@@ -488,11 +511,79 @@ function openAiMenu(chunkId: number, anchor: DOMRect): void {
   aiMenu = menu;
 }
 
+// --- author popover ---------------------------------------------------------------
+
+let authorPop: HTMLElement | undefined;
+
+function closeAuthorPop(): void {
+  authorPop?.remove();
+  authorPop = undefined;
+}
+
+/** The identity card behind a chip or timeline row: who, when, what — and links. */
+function openAuthorPop(author: AuthorInfo, anchor: DOMRect): void {
+  closeAuthorPop();
+  closeAiMenu();
+  const pop = document.createElement('div');
+  pop.className = 'mf-author-pop';
+
+  const head = document.createElement('div');
+  head.className = 'mf-author-pop-head';
+  const avatar = document.createElement('span');
+  avatar.className = 'mf-author-chip mf-author-chip-static';
+  avatar.append(chipContent(author));
+  const name = document.createElement('span');
+  name.className = 'mf-author-pop-name';
+  name.textContent = author.name;
+  head.append(avatar, name);
+
+  const meta = document.createElement('div');
+  meta.className = 'mf-author-pop-meta';
+  meta.textContent = `${relativeDate(author.timestamp)} · ${author.shortSha}`;
+  const subject = document.createElement('div');
+  subject.className = 'mf-author-pop-subject';
+  subject.textContent = author.subject;
+
+  pop.append(head, meta, subject);
+  const link = (href: string, label: string): HTMLElement => {
+    const a = document.createElement('a');
+    a.className = 'mf-author-pop-link';
+    a.href = href;
+    a.textContent = label;
+    return a;
+  };
+  if (author.commitUrl) {
+    pop.append(link(author.commitUrl, '→ Open commit on GitHub'));
+  }
+  if (author.profileUrl) {
+    pop.append(link(author.profileUrl, '→ Open GitHub profile'));
+  }
+  const email = document.createElement('button');
+  email.className = 'mf-author-pop-email';
+  email.textContent = author.email;
+  email.title = 'Click to copy';
+  email.addEventListener('click', () => {
+    void navigator.clipboard?.writeText(author.email);
+    email.textContent = 'Copied!';
+    window.setTimeout(() => (email.textContent = author.email), 1200);
+  });
+  pop.append(email);
+
+  document.body.append(pop);
+  const { width, height } = pop.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, Math.min(anchor.right + 6, window.innerWidth - width - 8))}px`;
+  pop.style.top = `${Math.max(8, Math.min(anchor.top, window.innerHeight - height - 8))}px`;
+  authorPop = pop;
+}
+
 window.addEventListener(
   'mousedown',
   (event) => {
     if (aiMenu && !aiMenu.contains(event.target as Node)) {
       closeAiMenu();
+    }
+    if (authorPop && !authorPop.contains(event.target as Node)) {
+      closeAuthorPop();
     }
   },
   { capture: true },
@@ -557,7 +648,10 @@ function buildSession(whitespace: WhitespaceMode): void {
   session.currentChunkId = undefined;
   session.flashChunkId = undefined;
   lineNumbersSignature = '';
+  // Chunk ids changed with the recompute; stale authorship must not mis-attach.
+  session.authorChips.setData([]);
   refresh();
+  requestBlame();
 }
 
 /** Asks an inline yes/no in the confirm bar; resolves false on cancel. */
@@ -684,6 +778,11 @@ function start(payload: InitPayload): void {
       left: new Connectors(layout.leftStrip, 'left', panes, callbacks),
       right: new Connectors(layout.rightStrip, 'right', panes, callbacks),
     },
+    authorChips: new AuthorChips(
+      { left: layout.hosts.left, right: layout.hosts.right },
+      panes,
+      openAuthorPop,
+    ),
     collections: {
       left: panes.left.createDecorationsCollection([]),
       center: panes.center.createDecorationsCollection([]),
@@ -709,6 +808,7 @@ function start(payload: InitPayload): void {
   refresh();
   // Land on the first pending change immediately — flash and outline included.
   navigateToNextUnresolved();
+  requestBlame();
 
   // Debug handle for the dev harness (dev/harness*.html); inert inside a real webview.
   (window as unknown as Record<string, unknown>).__mfSession = session;
@@ -764,6 +864,9 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
     drawer?.showError(message.message, message.unconfigured === true);
   } else if (message.type === 'aiResolutions') {
     applyAiResolutions(message.resolutions, message.missing);
+  } else if (message.type === 'blameResult') {
+    session?.authorChips.setData(message.payload);
+    redrawConnectors();
   } else if (message.type === 'offerRestore') {
     offerRestore(message.payload);
   }
@@ -775,9 +878,10 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
 window.addEventListener(
   'keydown',
   (event) => {
-    if (event.key === 'Escape' && aiMenu) {
+    if (event.key === 'Escape' && (aiMenu || authorPop)) {
       event.preventDefault();
       closeAiMenu();
+      closeAuthorPop();
       return;
     }
     if (event.key === 'F7') {
