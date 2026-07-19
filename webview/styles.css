@@ -684,6 +684,13 @@ body.mf-light .mf-zone-conf {
   opacity: 0.75;
 }
 
+/* Tool-progress lines in the AI stream: present but deliberately quiet. */
+.mf-explain-activity {
+  opacity: 0.6;
+  font-size: 0.88em;
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
 .mf-explain-error {
   color: var(--vscode-errorForeground, #f48771);
 }

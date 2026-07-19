@@ -750,6 +750,8 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
       pendingAsk.answer += message.text;
     }
     drawer?.appendDelta(message.text);
+  } else if (message.type === 'explainActivity') {
+    drawer?.appendActivity(message.text);
   } else if (message.type === 'explainDone') {
     if (pendingAsk) {
       chatHistory.push(pendingAsk);

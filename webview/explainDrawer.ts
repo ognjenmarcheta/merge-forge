@@ -8,6 +8,8 @@
 export interface ExplainDrawer {
   openLoading(conflictCount: number): void;
   appendDelta(text: string): void;
+  /** A muted tool-progress line ("⚙ Read src/x.ts") in the stream's flow. */
+  appendActivity(text: string): void;
   finish(truncated?: boolean): void;
   showError(message: string, unconfigured: boolean): void;
   /** Marks the resolve request in flight: disables the button, shows progress. */
@@ -141,8 +143,22 @@ export function createExplainDrawer(
 
   let streaming = false;
   let resolving = false;
-  let accumulated = '';
+  // The stream interleaves markdown with tool-activity lines; explanationText()
+  // (the resolve request's context) must carry only the markdown.
+  let parts: Array<{ kind: 'md' | 'activity'; text: string }> = [];
   let stickToBottom = true;
+
+  const appendMd = (text: string): void => {
+    const last = parts[parts.length - 1];
+    if (last && last.kind === 'md') {
+      last.text += text;
+    } else {
+      parts.push({ kind: 'md', text });
+    }
+  };
+
+  const RESOLVING_HTML =
+    '<p class="mf-explain-waiting">Resolving conflicts<span class="mf-explain-cursor"></span></p>';
 
   const syncResolveButton = (): void => {
     const busy = streaming || resolving;
@@ -156,7 +172,14 @@ export function createExplainDrawer(
   });
 
   const render = (extraHtml = ''): void => {
-    body.innerHTML = `${renderMarkdown(accumulated)}${
+    const html = parts
+      .map((part) =>
+        part.kind === 'activity'
+          ? `<p class="mf-explain-activity">${escapeHtml(part.text)}</p>`
+          : renderMarkdown(part.text),
+      )
+      .join('');
+    body.innerHTML = `${html}${
       streaming ? '<span class="mf-explain-cursor"></span>' : ''
     }${extraHtml}`;
     if (stickToBottom) {
@@ -180,7 +203,7 @@ export function createExplainDrawer(
     },
     openLoading(conflictCount) {
       streaming = true;
-      accumulated = '';
+      parts = [];
       stickToBottom = true;
       syncResolveButton();
       // The scope in the header: one section per unresolved conflict is coming, no more —
@@ -196,8 +219,15 @@ export function createExplainDrawer(
       if (!streaming) {
         return;
       }
-      accumulated += text;
+      appendMd(text);
       render();
+    },
+    appendActivity(text) {
+      if (!streaming && !resolving) {
+        return;
+      }
+      parts.push({ kind: 'activity', text });
+      render(resolving ? RESOLVING_HTML : '');
     },
     finish(truncated) {
       streaming = false;
@@ -213,9 +243,7 @@ export function createExplainDrawer(
       syncResolveButton();
       if (active) {
         host.classList.remove('mf-hidden');
-        render(
-          '<p class="mf-explain-waiting">Resolving conflicts<span class="mf-explain-cursor"></span></p>',
-        );
+        render(RESOLVING_HTML);
       }
     },
     showResolveReport(applied, requested, remaining, mechanical = 0) {
@@ -236,15 +264,18 @@ export function createExplainDrawer(
       );
     },
     explanationText() {
-      return accumulated;
+      return parts
+        .filter((part) => part.kind === 'md')
+        .map((part) => part.text)
+        .join('');
     },
     askStart(question) {
       streaming = true;
       stickToBottom = true;
       syncResolveButton();
       host.classList.remove('mf-hidden');
-      const divider = accumulated.trim() === '' ? '' : '\n\n---\n\n';
-      accumulated += `${divider}**You:** ${question}\n\n`;
+      const hasText = parts.some((part) => part.kind === 'md' && part.text.trim() !== '');
+      appendMd(`${hasText ? '\n\n---\n\n' : ''}**You:** ${question}\n\n`);
       render();
     },
     showError(message, unconfigured) {
