@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="media/forge-banner.jpg" width="640" alt="MergeForge — two branches forged into one" />
+</p>
+
 # MergeForge
 
 A JetBrains/WebStorm-style **three-pane visual merge conflict resolver** for VS Code and Cursor — with an AI assistant that actually reads your repository.
