@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=byte-forge.merge-forge"><img alt="Install on VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/byte-forge.merge-forge?label=VS%20Marketplace&logo=visualstudiocode&logoColor=white"></a>
-  <a href="https://open-vsx.org/extension/byte-forge/merge-forge"><img alt="Install on Open VSX" src="https://img.shields.io/open-vsx/v/byte-forge/merge-forge?label=Open%20VSX&color=purple"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=byte-forge.merge-forge"><img alt="Install on VS Marketplace" src="https://img.shields.io/badge/VS%20Marketplace-Install-007ACC?logo=visualstudiocode&logoColor=white"></a>
+  <a href="https://open-vsx.org/extension/byte-forge/merge-forge"><img alt="Install on Open VSX" src="https://img.shields.io/badge/Open%20VSX-Install-C160EF"></a>
 </p>
 
 # MergeForge
