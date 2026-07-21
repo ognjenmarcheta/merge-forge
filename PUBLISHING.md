@@ -37,10 +37,11 @@ First-run:
 1. **Push the repo to GitHub** (`github.com/ognjenmarcheta/merge-forge`, matching
    package.json's `repository`). The marketplace serves README images from the repo —
    without the push, the listing shows broken images.
-2. **VS Code Marketplace** — needs a [publisher](https://marketplace.visualstudio.com/manage)
-   and an Azure DevOps PAT with Marketplace→Manage scope:
+2. **VS Code Marketplace** — needs publisher **ByteForge Software** (`byte-forge`) at
+   [marketplace manage](https://marketplace.visualstudio.com/manage) and an Azure DevOps
+   PAT with Marketplace→Manage scope:
    ```sh
-   npx vsce login ognjenmarcheta
+   npx vsce login byte-forge
    npx vsce publish --no-dependencies          # or: npx vsce publish -i merge-forge-1.0.0.vsix
    ```
 3. **Open VSX** (how Cursor/VSCodium users install without a vsix) — needs an

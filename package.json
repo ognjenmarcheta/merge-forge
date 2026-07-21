@@ -3,7 +3,7 @@
   "displayName": "MergeForge — JetBrains-style Conflict Resolver",
   "description": "Resolve Git merge conflicts in a JetBrains/WebStorm-style three-pane visual merge editor.",
   "version": "1.0.0",
-  "publisher": "ognjenmarcheta",
+  "publisher": "byte-forge",
   "license": "MIT",
   "private": true,
   "icon": "media/icon.png",
