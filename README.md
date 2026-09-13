@@ -1,6 +1,12 @@
 <p align="center">
+  <img src="media/project-banner.png" width="800" alt="Merge Forge — three-pane merge conflict resolution for VS Code and Cursor" />
+</p>
+
+<!--
+<p align="center">
   <img src="media/forge-banner.jpg" width="640" alt="MergeForge — two branches forged into one" />
 </p>
+-->
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=byte-forge.merge-forge"><img alt="Install on VS Marketplace" src="https://img.shields.io/badge/VS%20Marketplace-Install-007ACC?logo=visualstudiocode&logoColor=white"></a>
@@ -114,7 +120,3 @@ To iterate on the UI without launching an editor, serve the repo and open `dev/h
 ## License
 
 MIT
-
-<p align="center">
-  <img src="media/project-banner.png" width="800" alt="Merge Forge — three-pane merge conflict resolution for VS Code and Cursor" />
-</p>
