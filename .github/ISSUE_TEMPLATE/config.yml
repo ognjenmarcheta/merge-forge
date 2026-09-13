@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Private security report
+    url: mailto:contact@byteforge.software?subject=SECURITY%3A%20Merge%20Forge
+    about: Report vulnerabilities privately by email. Do not disclose exploit details in public issues.

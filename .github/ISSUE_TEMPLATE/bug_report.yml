@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible problem with Merge Forge.
+title: '[Bug]: '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report vulnerabilities privately to contact@byteforge.software, not here.
+        Use a disposable repository and remove credentials, private code, and sensitive paths.
+  - type: input
+    id: extension-version
+    attributes:
+      label: Merge Forge version
+      description: Find this in the editor's Extensions panel.
+    validations:
+      required: true
+  - type: input
+    id: editor-version
+    attributes:
+      label: Editor and version
+      placeholder: VS Code or Cursor, including its version
+    validations:
+      required: true
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal synthetic conflict example when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or screenshots
+      description: For AI issues, include the provider and model, but never an API key or private code.
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow the [Code of Conduct](https://github.com/ognjenmarcheta/merge-forge/blob/main/CODE_OF_CONDUCT.md).
+          required: true

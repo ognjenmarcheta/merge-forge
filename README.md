@@ -107,8 +107,9 @@ pnpm install
 pnpm run watch     # extension host + webview + Monaco worker
 # press F5 to launch the Extension Development Host
 
-pnpm test          # unit, git-parity, and end-to-end tests
-pnpm run check     # format + lint + typecheck + test
+pnpm run build     # required before running tests directly
+pnpm test          # unit, git-parity, activation, and end-to-end tests
+pnpm run check     # format + lint + typecheck + build + test
 pnpm run package   # build a .vsix
 
 node scripts/make-conflict-repo.mjs            # throwaway repo with every conflict shape
@@ -117,6 +118,12 @@ node scripts/make-conflict-repo.mjs --rebase   # ...stopped mid-rebase instead
 
 To iterate on the UI without launching an editor, serve the repo and open `dev/harness.html` — it drives the real webview bundle in a plain browser with a stubbed host, including `?scenario=hero|ai|history|light` self-driving states.
 
+## Contributing
+
+See [Contributing](CONTRIBUTING.md) for setup, debugging, and pull requests, and follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately using the
+[Security Policy](SECURITY.md). Maintainers can use the existing [Publishing Guide](PUBLISHING.md).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
