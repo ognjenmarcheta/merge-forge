@@ -113,10 +113,11 @@ describe('detectOperation', () => {
 });
 
 describe('findRepoRoot', () => {
-  // git canonicalizes its answer, so compare against the resolved path: on macOS the
-  // fixture lives under /var/... while git reports the real /private/var/... location.
+  // Resolve both paths to handle macOS symlinks and Git's forward slashes on Windows.
   test('resolves the root from a nested path', async () => {
-    expect(await findRepoRoot(join(repo, 'modify-modify.txt'))).toBe(realpathSync(repo));
+    const root = await findRepoRoot(join(repo, 'modify-modify.txt'));
+    if (root === undefined) throw new Error('Expected a repository root');
+    expect(realpathSync(root)).toBe(realpathSync(repo));
   });
 
   test('returns undefined outside a repository', async () => {

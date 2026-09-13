@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a focused improvement to Merge Forge.
+title: '[Feature]: '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: Explain the task you want to complete and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the outcome and a concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: input
+    id: environment
+    attributes:
+      label: Editor and Merge Forge versions
+      description: Include these when the proposal concerns a specific editor or existing behavior.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add synthetic examples or sanitized screenshots. Do not include credentials or private code.
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow the [Code of Conduct](https://github.com/ognjenmarcheta/merge-forge/blob/main/CODE_OF_CONDUCT.md).
+          required: true
