@@ -114,3 +114,7 @@ To iterate on the UI without launching an editor, serve the repo and open `dev/h
 ## License
 
 MIT
+
+<p align="center">
+  <img src="media/project-banner.png" width="800" alt="Merge Forge — three-pane merge conflict resolution for VS Code and Cursor" />
+</p>
